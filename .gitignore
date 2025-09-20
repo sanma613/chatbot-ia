@@ -1,0 +1,41 @@
+### Frontend (Next.js) ###
+/frontend/node_modules
+/frontend/.pnp
+/frontend/.pnp.js
+/frontend/.yarn
+/frontend/coverage
+/frontend/.next
+/frontend/out
+/frontend/build
+/frontend/npm-debug.log*
+/frontend/yarn-debug.log*
+/frontend/yarn-error.log*
+/frontend/.pnpm-debug.log*
+/frontend/next-env.d.ts
+
+### Backend (Fastapi) ###
+/backend/__pycache__
+/backend/.pytest_cache
+/backend/.mypy_cache
+/backend/.venv
+/backend/venv
+/backend/build
+/backend/*.pyc
+/backend/*.egg-info/
+
+### Archivos de Configuración y Entorno ###
+# Ignorar archivos de entorno en ambos directorios
+.env
+.env.*
+/frontend/.env
+/frontend/.env.*
+/backend/.env
+/backend/.env.*
+
+### Archivos de Sistema y Vercel ###
+.DS_Store
+*.pem
+.vercel
+
+### TypeScript ###
+*.tsbuildinfo
