@@ -2,7 +2,7 @@
 
 - ¿Qué problema resuelve este Pull Request?
 - ¿Qué funcionalidad se ha añadido o modificado?
-- ¿Cómo se relaciona con las historias de usuario o tareas del proyecto? (Ej: `Closes #123`)
+- ¿Cómo se relaciona con las historias de usuario o tareas del proyecto?
 
 ---
 
@@ -28,9 +28,3 @@ Marque con una `[x]` las casillas que cumplan.
 ### 📸 **Capturas de Pantalla (Opcional)**
 
 - Si es un cambio visual, adjunta capturas de pantalla o un GIF para mostrar el resultado.
-
----
-
-### 🔗 **Enlaces Relacionados**
-
-- (Ej: Enlace a la tarea en Trello, Figma, o documento de diseño)
