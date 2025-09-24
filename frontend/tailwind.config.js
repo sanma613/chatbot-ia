@@ -8,11 +8,11 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        primary: '#1E3A8A',     // Azul oscuro
-        secondary: '#FFA024',   // Naranja
-        gray: '#DEE1E6',        // Gris medio
-        light: '#F5F5F5',       // Gris muy claro
-        dark: '#2E2E2E',        // Gris muy oscuro
+        primary: '#1E3A8A', // Azul oscuro
+        secondary: '#FFA024', // Naranja
+        gray: '#DEE1E6', // Gris medio
+        light: '#F5F5F5', // Gris muy claro
+        dark: '#2E2E2E', // Gris muy oscuro
         'primary-light': '#4F6DB3',
         'primary-dark': '#152A65',
         'secondary-light': '#FFB854',
@@ -29,4 +29,4 @@ module.exports = {
     },
   },
   plugins: [],
-}
+};
