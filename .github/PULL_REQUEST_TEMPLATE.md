@@ -14,7 +14,7 @@ Marque con una `[x]` las casillas que cumplan.
 - [ ] He comentado mi código, particularmente en las áreas difíciles de entender.
 - [ ] He realizado pruebas locales para verificar que la funcionalidad funciona como se esperaba.
 - [ ] Los cambios no introducen nuevos errores o advertencias.
-- [ ] He actualizado la documentación si es necesario (ej: `README.md` o documentación de la API).
+- [ ] He actualizado la documentación si es necesario (Ej: `README.md` o documentación de la API).
 
 ---
 
