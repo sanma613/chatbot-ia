@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, ChangeEvent, FormEvent } from 'react';
+import Image from 'next/image'
 
 interface SignupFormData {
   name: string;
@@ -37,10 +38,19 @@ export default function SignupPage() {
     // Contenedor principal que centra la tarjeta de registro en la pantalla
     <main className="flex items-center justify-center min-h-screen bg-[#F5F5F5]">
       {/* Tarjeta de Registro */}
-      <div className="w-full max-w-md p-8 space-y-8 bg-light rounded-2xl shadow-2xl">
+      <div className="w-full max-w-md p-5 space-y-8 bg-light rounded-2xl shadow-2xl">
         {/* Título */}
-        <h1 className="text-3xl font-bold text-center text-primary">
-          Crear Cuenta - Logo
+        <div className="text-center">
+          <Image
+            src="/images/logo_uni.png" 
+            alt="Logo Unichatbot"
+            width={300}
+            height={100}
+            className="mx-auto mb-6"
+          />
+        </div>
+        <h1 className="text-xl font-bold text-center text-primary">
+          Crear Cuenta 
         </h1>
 
         {/* Formulario */}
