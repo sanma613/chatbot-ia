@@ -53,7 +53,7 @@ export default function LandingPage() {
           <h1 className="text-5xl font-bold text-primary mb-4">
             Bienvenido a UniChatbot
           </h1>
-          <p className="bg-white/20 backdrop-blur-sm rounded-xl p-6 text-dark mb-8">
+          <p className="bg-white/20 backdrop-blur-sm rounded-xl p-6 text-primary-dark mb-8">
             Tu asistente inteligente para la vida universitaria. Resuelve dudas,
             organiza tu horario y prepárate para tus exámenes, todo en un solo
             lugar.
