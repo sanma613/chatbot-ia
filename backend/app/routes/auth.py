@@ -1,21 +1,79 @@
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import APIRouter, Depends, HTTPException, Response, Cookie
+from fastapi.security import HTTPBearer
+from pydantic import BaseModel
 
-from app.core.config import supabase_
+from app.services.auth_services import get_user_from_token, register_user, login_user
 
 router = APIRouter()
 security = HTTPBearer()
 
 
-@router.get("/protected")
-async def protected_route(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-) -> dict:
-    token = credentials.credentials
-    try:
-        user = supabase_.auth.get_user(token)
-        if user is None or user.user is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        return {"message": "Access granted", "user": user.user}
-    except Exception as e:
-        raise HTTPException(status_code=401, detail="Invalid token") from e
+# --- Responses / Requests --- #
+class MeResponse(BaseModel):
+    message: str
+    user: dict
+
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    full_name: str
+    role: str = "user"
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+# --- Dependencias --- #
+def get_current_user(access_token: str | None = Cookie(default=None)):
+    """Obtener usuario autenticado desde cookie"""
+    if not access_token:
+        raise HTTPException(status_code=401, detail="No token cookie found")
+
+    user = get_user_from_token(access_token)
+    return user
+
+
+# --- Routes --- #
+@router.get("/me", response_model=MeResponse)
+def get_me(user=Depends(get_current_user)):
+    """Obtener información del usuario autenticado"""
+    return {"message": "Access granted", "user": user.model_dump()}
+
+
+@router.post("/register")
+def register(request: RegisterRequest):
+    """Registro de nuevo usuario"""
+    user = register_user(
+        email=request.email,
+        password=request.password,
+        full_name=request.full_name,
+        role=request.role,
+    )
+    return {"message": "Usuario creado correctamente", "user_id": user.id}
+
+
+@router.post("/login")
+def login(request: LoginRequest, response: Response):
+    """Login de usuario y creación de cookie de sesión"""
+    token = login_user(email=request.email, password=request.password)
+
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        max_age=60 * 60 * 24 * 7,
+        secure=False,
+        samesite="lax",
+    )
+
+    return {"message": "Login exitoso"}
+
+
+@router.post("/logout")
+def logout(response: Response, user=Depends(get_current_user)):
+    """Cerrar sesión eliminando cookie"""
+    response.delete_cookie(key="access_token")
+    return {"message": "Sesión cerrada"}
