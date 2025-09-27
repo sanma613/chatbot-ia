@@ -1,4 +1,6 @@
 'use client';
+import { handleError } from '@/lib/errors';
+import { useRouter } from 'next/navigation';
 import React, { useState, ChangeEvent, FormEvent } from 'react';
 import Image from 'next/image'
 
@@ -7,6 +9,7 @@ interface SignupFormData {
   email: string;
   password: string;
   confirmPassword: string;
+  role: string;
 }
 
 export default function SignupPage() {
@@ -15,7 +18,10 @@ export default function SignupPage() {
     email: '',
     password: '',
     confirmPassword: '',
+    role: 'user',
   });
+
+  const router = useRouter();
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -25,13 +31,47 @@ export default function SignupPage() {
     }));
   };
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  async function registerUser(data: SignupFormData) {
+    try {
+      const res = await fetch('http://localhost:8000/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: data.email,
+          password: data.password,
+          full_name: data.name,
+          role: data.role,
+        }),
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.detail || 'Error registrando usuario');
+      }
+
+      return await res.json(); // { message: "Usuario creado correctamente" }
+    } catch (error: unknown) {
+      handleError(error);
+      throw error;
+    }
+  }
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
     if (formData.password !== formData.confirmPassword) {
       alert('Contraseñas no coinciden');
       return;
     }
-    console.log('Datos de registro: ', formData);
+
+    try {
+      await registerUser(formData); // ya no necesitas guardar token
+      alert('Usuario registrado correctamente');
+      router.push('/login');
+    } catch (error: unknown) {
+      console.error('Error en registro:', error);
+    }
   };
 
   return (

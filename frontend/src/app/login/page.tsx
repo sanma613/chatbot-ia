@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useState } from 'react';
 import { ChangeEvent, FormEvent } from 'react';
+import { handleError } from '@/lib/errors';
 
 interface FormData {
   email: string;
@@ -24,10 +25,41 @@ export default function LoginPage() {
     }));
   };
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  async function loginUser(data: FormData) {
+    try {
+      const res = await fetch('http://localhost:8000/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: data.email, password: data.password }),
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.detail || 'Credenciales inválidas');
+      }
+
+      return await res.json();
+    } catch (error: unknown) {
+      handleError(error);
+      throw error;
+    }
+  }
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    console.log('Datos del formulario:', formData);
+
+    try {
+      const result = await loginUser(formData);
+      console.log('Usuario logueado:', result);
+
+      alert('Login exitoso');
+      // router.push('/dashboard');
+    } catch (error: unknown) {
+      console.error('Error en registro:', error);
+    }
   };
+
   return (
     // Contenedor principal que ocupa toda la pantalla y centra el contenido
     <div className="min-h-screen flex items-center justify-center bg-light p-4">
