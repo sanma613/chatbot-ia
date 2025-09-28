@@ -1,5 +1,6 @@
 import React from 'react';
 import { Activity, weekDays } from '@/app/types/calendar';
+import { cn } from '@/lib/Utils';
 
 interface CalendarGridProps {
   currentDate: Date;
@@ -80,13 +81,18 @@ export default function CalendarGrid({
           <div
             key={day}
             onClick={() => onDayClick(day)}
-            className={`p-2 h-24 border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors ${
-              isToday ? 'bg-primary/10 border-primary' : ''
-            } ${isSelected ? 'bg-primary/20' : ''}`}
+            className={cn(
+              'p-2 h-24 border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors',
+              isToday && 'bg-primary/10 border-primary',
+              isSelected && 'bg-primary/20'
+            )}
           >
             <div className="flex flex-col h-full">
               <span
-                className={`text-sm font-medium ${isToday ? 'text-primary font-bold' : 'text-dark'}`}
+                className={cn(
+                  'text-sm font-medium',
+                  isToday ? 'text-primary font-bold' : 'text-dark'
+                )}
               >
                 {day}
               </span>
@@ -95,7 +101,7 @@ export default function CalendarGrid({
                   {dayActivities.slice(0, 3).map((activity) => (
                     <div
                       key={activity.id}
-                      className={`w-2 h-2 rounded-full ${activity.color}`}
+                      className={cn('w-2 h-2 rounded-full', activity.color)}
                       title={activity.title}
                     ></div>
                   ))}

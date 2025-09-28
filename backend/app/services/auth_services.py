@@ -1,8 +1,11 @@
+from typing import Any, Dict
+
 from fastapi import HTTPException
+
 from app.core.config import supabase_
 
 
-def get_user_from_token(token: str):
+def get_user_from_token(token: str) -> Any:
     """Obtener usuario desde token JWT"""
     try:
         user_response = supabase_.auth.get_user(token)
@@ -13,7 +16,7 @@ def get_user_from_token(token: str):
         raise HTTPException(status_code=401, detail="Token inválido") from e
 
 
-def register_user(email: str, password: str, full_name: str, role: str = "user"):
+def register_user(email: str, password: str, full_name: str, role: str = "user") -> Any:
     """Registrar nuevo usuario en Supabase"""
     try:
         response = supabase_.auth.sign_up({"email": email, "password": password})
@@ -31,7 +34,7 @@ def register_user(email: str, password: str, full_name: str, role: str = "user")
         raise HTTPException(status_code=400, detail=f"Error en registro: {str(e)}")
 
 
-def login_user(email: str, password: str):
+def login_user(email: str, password: str) -> str:
     """Autenticar usuario y retornar access token"""
     try:
         result = supabase_.auth.sign_in_with_password(
@@ -51,7 +54,7 @@ def login_user(email: str, password: str):
         raise HTTPException(status_code=400, detail=f"Error en login: {error_msg}")
 
 
-def get_user_info(user: str):
+def get_user_info(user: Any) -> Dict[str, Any]:
     """Obtener información del usuario desde la tabla profiles"""
     user_id = user.id
     profile = (

@@ -1,10 +1,12 @@
+from typing import Any, Dict, List
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from app.routes.auth import get_current_user
 
+from app.routes.auth import get_current_user
 from app.services.chatbot_services import (
-    get_questions_from_db,
     get_answer_by_question_id,
+    get_questions_from_db,
 )
 
 router = APIRouter()
@@ -17,11 +19,13 @@ class QuestionResponse(BaseModel):
 
 
 class QuestionsListResponse(BaseModel):
-    questions: list[QuestionResponse]
+    questions: List[QuestionResponse]
 
 
 @router.get("/list-questions", response_model=QuestionsListResponse)
-def list_questions(user=Depends(get_current_user)):
+def list_questions(
+    user: Any = Depends(get_current_user),
+) -> Dict[str, List[QuestionResponse]]:
     """Endpoint para listar preguntas frecuentes desde la base de datos"""
     questions = get_questions_from_db()
     return {
@@ -32,7 +36,9 @@ def list_questions(user=Depends(get_current_user)):
 
 
 @router.get("/get_answer/{question_id}")
-def get_answer(question_id: int, user=Depends(get_current_user)):
+def get_answer(
+    question_id: int, user: Any = Depends(get_current_user)
+) -> Dict[str, Any]:
     """Endpoint para obtener la respuesta a una pregunta frecuente por su ID"""
     answer = get_answer_by_question_id(question_id)
     if answer is None:

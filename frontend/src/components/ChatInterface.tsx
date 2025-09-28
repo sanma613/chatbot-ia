@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, Paperclip, Send } from 'lucide-react';
 import Image from 'next/image';
-import clsx from 'clsx';
 import { useUser } from '@/hooks/useUser';
+import { cn } from '@/lib/Utils';
 
 type Question = {
   id: number;
@@ -213,7 +213,7 @@ export default function ChatInterface() {
           {messages.map((msg) => (
             <div
               key={msg.id}
-              className={clsx('flex items-start gap-4', {
+              className={cn('flex items-start gap-4', {
                 'justify-end': msg.sender === 'user',
               })}
             >
@@ -228,7 +228,7 @@ export default function ChatInterface() {
               )}
 
               <div
-                className={clsx(
+                className={cn(
                   'relative max-w-lg p-4 rounded-2xl whitespace-pre-wrap break-words',
                   {
                     'bg-primary text-white rounded-tr-none shadow-md':
@@ -240,7 +240,7 @@ export default function ChatInterface() {
               >
                 <p>{msg.text}</p>
                 <span
-                  className={clsx('text-xs mt-2 block', {
+                  className={cn('text-xs mt-2 block', {
                     'text-blue-200': msg.sender === 'user',
                     'text-gray-500': msg.sender !== 'user',
                   })}
@@ -280,7 +280,7 @@ export default function ChatInterface() {
           />
 
           <button
-            className={clsx(
+            className={cn(
               'absolute right-3 p-2.5 rounded-full transition-colors',
               blocked
                 ? 'bg-blue-200 text-white cursor-not-allowed' // botón deshabilitado

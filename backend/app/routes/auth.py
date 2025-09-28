@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, Cookie
+from typing import Any, Dict, Optional
+
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 
 from app.services.auth_services import (
     get_user_from_token,
-    register_user,
-    login_user,
     get_user_info,
+    login_user,
+    register_user,
 )
 
 router = APIRouter()
@@ -32,7 +34,7 @@ class LoginRequest(BaseModel):
 
 
 # --- Dependencias --- #
-def get_current_user(access_token: str | None = Cookie(default=None)):
+def get_current_user(access_token: Optional[str] = Cookie(default=None)) -> Any:
     """Obtener usuario autenticado desde cookie"""
     if not access_token:
         raise HTTPException(status_code=401, detail="No token cookie found")
@@ -43,13 +45,13 @@ def get_current_user(access_token: str | None = Cookie(default=None)):
 
 # --- Routes --- #
 @router.get("/me", response_model=MeResponse)
-def get_me(user=Depends(get_current_user)):
+def get_me(user: Any = Depends(get_current_user)) -> Dict[str, Any]:
     """Obtener información del usuario autenticado"""
     return {"message": "Usuario autenticado", "user": get_user_info(user)}
 
 
 @router.post("/register")
-def register(request: RegisterRequest):
+def register(request: RegisterRequest) -> Dict[str, Any]:
     """Registro de nuevo usuario"""
     user = register_user(
         email=request.email,
@@ -61,7 +63,7 @@ def register(request: RegisterRequest):
 
 
 @router.post("/login")
-def login(request: LoginRequest, response: Response):
+def login(request: LoginRequest, response: Response) -> Dict[str, str]:
     """Login de usuario y creación de cookie de sesión"""
     token = login_user(email=request.email, password=request.password)
 
@@ -78,7 +80,7 @@ def login(request: LoginRequest, response: Response):
 
 
 @router.post("/logout")
-def logout(response: Response, user=Depends(get_current_user)):
+def logout(response: Response, user: Any = Depends(get_current_user)) -> Dict[str, str]:
     """Cerrar sesión eliminando cookie"""
     response.delete_cookie(key="access_token")
     return {"message": "Sesión cerrada"}
