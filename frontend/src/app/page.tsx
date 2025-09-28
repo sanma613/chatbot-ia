@@ -2,7 +2,7 @@
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import Ballpit from './components/Ballpit'; 
+import Ballpit from '@/components/Ballpit';
 
 export default function LandingPage() {
   return (
@@ -22,12 +22,13 @@ export default function LandingPage() {
             href="/login"
             className="text-dark font-semibold hover:text-primary mr-4"
           >
-          Iniciar Sesión
+            Iniciar Sesión
           </Link>
           <Link
             href="/signup"
             className="bg-secondary text-white font-semibold px-4 py-2 rounded-md hover:bg-secondary-dark transition-colors"
-          >Registrarse
+          >
+            Registrarse
           </Link>
         </nav>
       </header>
@@ -40,7 +41,7 @@ export default function LandingPage() {
             // propiedades
             count={50}
             gravity={0}
-            colors={[0xFFA024, 0xDEE1E6]}
+            colors={[0xffa024, 0xdee1e6]}
             friction={1}
             wallBounce={1}
             followCursor={false}

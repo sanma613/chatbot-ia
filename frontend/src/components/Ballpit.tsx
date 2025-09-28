@@ -20,7 +20,11 @@ import {
   PointLight,
   ACESFilmicToneMapping,
   Raycaster,
-  Plane
+  Plane,
+  OrthographicCamera,
+  Mesh,
+  Material,
+  BufferGeometry,
 } from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { Observer } from 'gsap/Observer';
@@ -44,9 +48,15 @@ interface SizeData {
   pixelRatio: number;
 }
 
+interface PostProcessingInterface {
+  render: () => void;
+  dispose?: () => void;
+  setSize?: (width: number, height: number) => void;
+}
+
 class X {
   #config: XConfig;
-  #postprocessing: any;
+  #postprocessing?: PostProcessingInterface;
   #resizeObserver?: ResizeObserver;
   #intersectionObserver?: IntersectionObserver;
   #resizeTimer?: number;
@@ -71,11 +81,12 @@ class X {
     wWidth: 0,
     wHeight: 0,
     ratio: 0,
-    pixelRatio: 0
+    pixelRatio: 0,
   };
 
   render: () => void = this.#render.bind(this);
-  onBeforeRender: (state: { elapsed: number; delta: number }) => void = () => {};
+  onBeforeRender: (state: { elapsed: number; delta: number }) => void =
+    () => {};
   onAfterRender: (state: { elapsed: number; delta: number }) => void = () => {};
   onAfterResize: (size: SizeData) => void = () => {};
   isDisposed: boolean = false;
@@ -115,7 +126,7 @@ class X {
     const rendererOptions: WebGLRendererParameters = {
       canvas: this.canvas,
       powerPreference: 'high-performance',
-      ...(this.#config.rendererOptions ?? {})
+      ...(this.#config.rendererOptions ?? {}),
     };
     this.renderer = new WebGLRenderer(rendererOptions);
     this.renderer.outputColorSpace = SRGBColorSpace;
@@ -129,13 +140,19 @@ class X {
         this.#resizeObserver.observe(this.canvas.parentNode as Element);
       }
     }
-    this.#intersectionObserver = new IntersectionObserver(this.#onIntersection.bind(this), {
-      root: null,
-      rootMargin: '0px',
-      threshold: 0
-    });
+    this.#intersectionObserver = new IntersectionObserver(
+      this.#onIntersection.bind(this),
+      {
+        root: null,
+        rootMargin: '0px',
+        threshold: 0,
+      }
+    );
     this.#intersectionObserver.observe(this.canvas);
-    document.addEventListener('visibilitychange', this.#onVisibilityChange.bind(this));
+    document.addEventListener(
+      'visibilitychange',
+      this.#onVisibilityChange.bind(this)
+    );
   }
 
   #onResize() {
@@ -168,7 +185,10 @@ class X {
     if (this.camera.isPerspectiveCamera && this.cameraFov) {
       if (this.cameraMinAspect && this.camera.aspect < this.cameraMinAspect) {
         this.#adjustFov(this.cameraMinAspect);
-      } else if (this.cameraMaxAspect && this.camera.aspect > this.cameraMaxAspect) {
+      } else if (
+        this.cameraMaxAspect &&
+        this.camera.aspect > this.cameraMaxAspect
+      ) {
         this.#adjustFov(this.cameraMaxAspect);
       } else {
         this.camera.fov = this.cameraFov;
@@ -187,18 +207,24 @@ class X {
   updateWorldSize() {
     if (this.camera.isPerspectiveCamera) {
       const fovRad = (this.camera.fov * Math.PI) / 180;
-      this.size.wHeight = 2 * Math.tan(fovRad / 2) * this.camera.position.length();
+      this.size.wHeight =
+        2 * Math.tan(fovRad / 2) * this.camera.position.length();
       this.size.wWidth = this.size.wHeight * this.camera.aspect;
-    } else if ((this.camera as any).isOrthographicCamera) {
-      const cam = this.camera as any;
-      this.size.wHeight = cam.top - cam.bottom;
-      this.size.wWidth = cam.right - cam.left;
+    } else {
+      // Handle orthographic camera case
+      const cam = this.camera as unknown as OrthographicCamera;
+      if ('top' in cam && 'bottom' in cam && 'left' in cam && 'right' in cam) {
+        this.size.wHeight = cam.top - cam.bottom;
+        this.size.wWidth = cam.right - cam.left;
+      }
     }
   }
 
   #updateRenderer() {
     this.renderer.setSize(this.size.width, this.size.height);
-    this.#postprocessing?.setSize(this.size.width, this.size.height);
+    if (this.#postprocessing?.setSize) {
+      this.#postprocessing.setSize(this.size.width, this.size.height);
+    }
     let pr = window.devicePixelRatio;
     if (this.maxPixelRatio && pr > this.maxPixelRatio) {
       pr = this.maxPixelRatio;
@@ -209,22 +235,30 @@ class X {
     this.size.pixelRatio = pr;
   }
 
-  get postprocessing() {
+  get postprocessing(): PostProcessingInterface | undefined {
     return this.#postprocessing;
   }
-  set postprocessing(value: any) {
+  set postprocessing(value: PostProcessingInterface) {
     this.#postprocessing = value;
     this.render = value.render.bind(value);
   }
 
   #onIntersection(entries: IntersectionObserverEntry[]) {
     this.#isAnimating = entries[0].isIntersecting;
-    this.#isAnimating ? this.#startAnimation() : this.#stopAnimation();
+    if (this.#isAnimating) {
+      this.#startAnimation();
+    } else {
+      this.#stopAnimation();
+    }
   }
 
   #onVisibilityChange() {
     if (this.#isAnimating) {
-      document.hidden ? this.#stopAnimation() : this.#startAnimation();
+      if (document.hidden) {
+        this.#stopAnimation();
+      } else {
+        this.#startAnimation();
+      }
     }
   }
 
@@ -256,16 +290,15 @@ class X {
   }
 
   clear() {
-    this.scene.traverse(obj => {
-      if ((obj as any).isMesh && typeof (obj as any).material === 'object' && (obj as any).material !== null) {
-        Object.keys((obj as any).material).forEach(key => {
-          const matProp = (obj as any).material[key];
-          if (matProp && typeof matProp === 'object' && typeof matProp.dispose === 'function') {
-            matProp.dispose();
-          }
-        });
-        (obj as any).material.dispose();
-        (obj as any).geometry.dispose();
+    this.scene.traverse((obj) => {
+      if ('isMesh' in obj && obj.isMesh) {
+        const mesh = obj as Mesh<BufferGeometry, Material>;
+        if (mesh.material) {
+          mesh.material.dispose();
+        }
+        if (mesh.geometry) {
+          mesh.geometry.dispose();
+        }
       }
     });
     this.scene.clear();
@@ -275,7 +308,9 @@ class X {
     this.#onResizeCleanup();
     this.#stopAnimation();
     this.clear();
-    this.#postprocessing?.dispose();
+    if (this.#postprocessing?.dispose) {
+      this.#postprocessing.dispose();
+    }
     this.renderer.dispose();
     this.isDisposed = true;
   }
@@ -284,7 +319,10 @@ class X {
     window.removeEventListener('resize', this.#onResize.bind(this));
     this.#resizeObserver?.disconnect();
     this.#intersectionObserver?.disconnect();
-    document.removeEventListener('visibilitychange', this.#onVisibilityChange.bind(this));
+    document.removeEventListener(
+      'visibilitychange',
+      this.#onVisibilityChange.bind(this)
+    );
   }
 }
 
@@ -375,24 +413,32 @@ class W {
         if (dist < sumRadius) {
           const overlap = sumRadius - dist;
           const correction = diff.normalize().multiplyScalar(0.5 * overlap);
-          const velCorrection = correction.clone().multiplyScalar(Math.max(vel.length(), 1));
+          const velCorrection = correction
+            .clone()
+            .multiplyScalar(Math.max(vel.length(), 1));
           pos.sub(correction);
           vel.sub(velCorrection);
           pos.toArray(positionData, base);
           vel.toArray(velocityData, base);
           otherPos.add(correction);
-          otherVel.add(correction.clone().multiplyScalar(Math.max(otherVel.length(), 1)));
+          otherVel.add(
+            correction.clone().multiplyScalar(Math.max(otherVel.length(), 1))
+          );
           otherPos.toArray(positionData, otherBase);
           otherVel.toArray(velocityData, otherBase);
         }
       }
       if (config.controlSphere0) {
-        const diff = new Vector3().copy(new Vector3().fromArray(positionData, 0)).sub(pos);
+        const diff = new Vector3()
+          .copy(new Vector3().fromArray(positionData, 0))
+          .sub(pos);
         const d = diff.length();
         const sumRadius0 = radius + sizeData[0];
         if (d < sumRadius0) {
           const correction = diff.normalize().multiplyScalar(sumRadius0 - d);
-          const velCorrection = correction.clone().multiplyScalar(Math.max(vel.length(), 2));
+          const velCorrection = correction
+            .clone()
+            .multiplyScalar(Math.max(vel.length(), 2));
           pos.sub(correction);
           vel.sub(velCorrection);
         }
@@ -421,19 +467,35 @@ class W {
   }
 }
 
+interface YUniforms {
+  thicknessDistortion: { value: number };
+  thicknessAmbient: { value: number };
+  thicknessAttenuation: { value: number };
+  thicknessPower: { value: number };
+  thicknessScale: { value: number };
+}
+
+interface ShaderType {
+  uniforms: Record<string, unknown>;
+  fragmentShader: string;
+  vertexShader?: string;
+}
+
 class Y extends MeshPhysicalMaterial {
-  uniforms: { [key: string]: { value: any } } = {
+  uniforms: YUniforms = {
     thicknessDistortion: { value: 0.1 },
     thicknessAmbient: { value: 0 },
     thicknessAttenuation: { value: 0.1 },
     thicknessPower: { value: 2 },
-    thicknessScale: { value: 10 }
+    thicknessScale: { value: 10 },
   };
 
-  constructor(params: any) {
+  constructor(params: Record<string, unknown> = {}) {
     super(params);
-    this.defines = { USE_UV: '' };
-    this.onBeforeCompile = shader => {
+    (this as unknown as { defines: Record<string, string> }).defines = {
+      USE_UV: '',
+    };
+    this.onBeforeCompile = (shader: ShaderType) => {
       Object.assign(shader.uniforms, this.uniforms);
       shader.fragmentShader =
         `
@@ -467,11 +529,14 @@ class Y extends MeshPhysicalMaterial {
           RE_Direct_Scattering(directLight, vUv, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, reflectedLight);
         `
       );
-      shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_begin>', lightsChunk);
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <lights_fragment_begin>',
+        lightsChunk
+      );
       if (this.onBeforeCompile2) this.onBeforeCompile2(shader);
     };
   }
-  onBeforeCompile2?: (shader: any) => void;
+  onBeforeCompile2?: (shader: ShaderType) => void;
 }
 
 const XConfig = {
@@ -484,7 +549,7 @@ const XConfig = {
     metalness: 0.5,
     roughness: 0.5,
     clearcoat: 1,
-    clearcoatRoughness: 0.15
+    clearcoatRoughness: 0.15,
   },
   minSize: 0.5,
   maxSize: 1,
@@ -497,7 +562,7 @@ const XConfig = {
   maxY: 5,
   maxZ: 2,
   controlSphere0: false,
-  followCursor: true
+  followCursor: true,
 };
 
 const U = new Object3D();
@@ -519,7 +584,9 @@ interface PointerData {
 
 const pointerMap = new Map<HTMLElement, PointerData>();
 
-function createPointerData(options: Partial<PointerData> & { domElement: HTMLElement }): PointerData {
+function createPointerData(
+  options: Partial<PointerData> & { domElement: HTMLElement }
+): PointerData {
   const defaultData: PointerData = {
     position: new Vector2(),
     nPosition: new Vector2(),
@@ -529,41 +596,80 @@ function createPointerData(options: Partial<PointerData> & { domElement: HTMLEle
     onMove: () => {},
     onClick: () => {},
     onLeave: () => {},
-    ...options
+    ...options,
   };
   if (!pointerMap.has(options.domElement)) {
     pointerMap.set(options.domElement, defaultData);
     if (!globalPointerActive) {
-      document.body.addEventListener('pointermove', onPointerMove as EventListener);
-      document.body.addEventListener('pointerleave', onPointerLeave as EventListener);
+      document.body.addEventListener(
+        'pointermove',
+        onPointerMove as EventListener
+      );
+      document.body.addEventListener(
+        'pointerleave',
+        onPointerLeave as EventListener
+      );
       document.body.addEventListener('click', onPointerClick as EventListener);
 
-      document.body.addEventListener('touchstart', onTouchStart as EventListener, {
-        passive: false
-      });
-      document.body.addEventListener('touchmove', onTouchMove as EventListener, {
-        passive: false
-      });
+      document.body.addEventListener(
+        'touchstart',
+        onTouchStart as EventListener,
+        {
+          passive: false,
+        }
+      );
+      document.body.addEventListener(
+        'touchmove',
+        onTouchMove as EventListener,
+        {
+          passive: false,
+        }
+      );
       document.body.addEventListener('touchend', onTouchEnd as EventListener, {
-        passive: false
+        passive: false,
       });
-      document.body.addEventListener('touchcancel', onTouchEnd as EventListener, {
-        passive: false
-      });
+      document.body.addEventListener(
+        'touchcancel',
+        onTouchEnd as EventListener,
+        {
+          passive: false,
+        }
+      );
       globalPointerActive = true;
     }
   }
   defaultData.dispose = () => {
     pointerMap.delete(options.domElement);
     if (pointerMap.size === 0) {
-      document.body.removeEventListener('pointermove', onPointerMove as EventListener);
-      document.body.removeEventListener('pointerleave', onPointerLeave as EventListener);
-      document.body.removeEventListener('click', onPointerClick as EventListener);
+      document.body.removeEventListener(
+        'pointermove',
+        onPointerMove as EventListener
+      );
+      document.body.removeEventListener(
+        'pointerleave',
+        onPointerLeave as EventListener
+      );
+      document.body.removeEventListener(
+        'click',
+        onPointerClick as EventListener
+      );
 
-      document.body.removeEventListener('touchstart', onTouchStart as EventListener);
-      document.body.removeEventListener('touchmove', onTouchMove as EventListener);
-      document.body.removeEventListener('touchend', onTouchEnd as EventListener);
-      document.body.removeEventListener('touchcancel', onTouchEnd as EventListener);
+      document.body.removeEventListener(
+        'touchstart',
+        onTouchStart as EventListener
+      );
+      document.body.removeEventListener(
+        'touchmove',
+        onTouchMove as EventListener
+      );
+      document.body.removeEventListener(
+        'touchend',
+        onTouchEnd as EventListener
+      );
+      document.body.removeEventListener(
+        'touchcancel',
+        onTouchEnd as EventListener
+      );
       globalPointerActive = false;
     }
   };
@@ -663,8 +769,14 @@ function onPointerLeave() {
 }
 
 function updatePointerData(data: PointerData, rect: DOMRect) {
-  data.position.set(pointerPosition.x - rect.left, pointerPosition.y - rect.top);
-  data.nPosition.set((data.position.x / rect.width) * 2 - 1, (-data.position.y / rect.height) * 2 + 1);
+  data.position.set(
+    pointerPosition.x - rect.left,
+    pointerPosition.y - rect.top
+  );
+  data.nPosition.set(
+    (data.position.x / rect.width) * 2 - 1,
+    (-data.position.y / rect.height) * 2 + 1
+  );
 }
 
 function isInside(rect: DOMRect) {
@@ -698,9 +810,15 @@ class Z extends InstancedMesh {
   }
 
   #setupLights() {
-    this.ambientLight = new AmbientLight(this.config.ambientColor, this.config.ambientIntensity);
+    this.ambientLight = new AmbientLight(
+      this.config.ambientColor,
+      this.config.ambientIntensity
+    );
     this.add(this.ambientLight);
-    this.light = new PointLight(this.config.colors[0], this.config.lightIntensity);
+    this.light = new PointLight(
+      this.config.colors[0],
+      this.config.lightIntensity
+    );
     this.add(this.light);
   }
 
@@ -709,14 +827,14 @@ class Z extends InstancedMesh {
       const colorUtils = (function (colorsArr: number[]) {
         let baseColors: number[] = colorsArr;
         let colorObjects: Color[] = [];
-        baseColors.forEach(col => {
+        baseColors.forEach((col) => {
           colorObjects.push(new Color(col));
         });
         return {
           setColors: (cols: number[]) => {
             baseColors = cols;
             colorObjects = [];
-            baseColors.forEach(col => {
+            baseColors.forEach((col) => {
               colorObjects.push(new Color(col));
             });
           },
@@ -732,7 +850,7 @@ class Z extends InstancedMesh {
             out.g = start.g + alpha * (end.g - start.g);
             out.b = start.b + alpha * (end.b - start.b);
             return out;
-          }
+          },
         };
       })(colors);
       for (let idx = 0; idx < this.count; idx++) {
@@ -772,11 +890,14 @@ interface CreateBallpitReturn {
   dispose: () => void;
 }
 
-function createBallpit(canvas: HTMLCanvasElement, config: any = {}): CreateBallpitReturn {
+function createBallpit(
+  canvas: HTMLCanvasElement,
+  config: Partial<typeof XConfig> = {}
+): CreateBallpitReturn {
   const threeInstance = new X({
     canvas,
     size: 'parent',
-    rendererOptions: { antialias: true, alpha: true }
+    rendererOptions: { antialias: true, alpha: true },
   });
   let spheres: Z;
   threeInstance.renderer.toneMapping = ACESFilmicToneMapping;
@@ -792,7 +913,9 @@ function createBallpit(canvas: HTMLCanvasElement, config: any = {}): CreateBallp
 
   canvas.style.touchAction = 'none';
   canvas.style.userSelect = 'none';
-  (canvas.style as any).webkitUserSelect = 'none';
+  (
+    canvas.style as CSSStyleDeclaration & { webkitUserSelect?: string }
+  ).webkitUserSelect = 'none';
 
   const pointerData = createPointerData({
     domElement: canvas,
@@ -805,9 +928,9 @@ function createBallpit(canvas: HTMLCanvasElement, config: any = {}): CreateBallp
     },
     onLeave() {
       spheres.config.controlSphere0 = false;
-    }
+    },
   });
-  function initialize(cfg: any) {
+  function initialize(cfg: Partial<typeof XConfig>) {
     if (spheres) {
       threeInstance.clear();
       threeInstance.scene.remove(spheres);
@@ -815,10 +938,10 @@ function createBallpit(canvas: HTMLCanvasElement, config: any = {}): CreateBallp
     spheres = new Z(threeInstance.renderer, cfg);
     threeInstance.scene.add(spheres);
   }
-  threeInstance.onBeforeRender = deltaInfo => {
+  threeInstance.onBeforeRender = (deltaInfo) => {
     if (!isPaused) spheres.update(deltaInfo);
   };
-  threeInstance.onAfterResize = size => {
+  threeInstance.onAfterResize = (size) => {
     spheres.config.maxX = size.wWidth / 2;
     spheres.config.maxY = size.wHeight / 2;
   };
@@ -836,17 +959,20 @@ function createBallpit(canvas: HTMLCanvasElement, config: any = {}): CreateBallp
     dispose() {
       pointerData.dispose?.();
       threeInstance.dispose();
-    }
+    },
   };
 }
 
-interface BallpitProps {
+interface BallpitProps extends Partial<typeof XConfig> {
   className?: string;
   followCursor?: boolean;
-  [key: string]: any;
 }
 
-const Ballpit: React.FC<BallpitProps> = ({ className = '', followCursor = true, ...props }) => {
+const Ballpit: React.FC<BallpitProps> = ({
+  className = '',
+  followCursor = true,
+  ...props
+}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const spheresInstanceRef = useRef<CreateBallpitReturn | null>(null);
 
@@ -856,7 +982,7 @@ const Ballpit: React.FC<BallpitProps> = ({ className = '', followCursor = true, 
 
     spheresInstanceRef.current = createBallpit(canvas, {
       followCursor,
-      ...props
+      ...props,
     });
 
     return () => {

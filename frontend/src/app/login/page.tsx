@@ -3,6 +3,7 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ChangeEvent, FormEvent } from 'react';
 import { handleError } from '@/lib/errors';
 
@@ -17,6 +18,7 @@ export default function LoginPage() {
     password: '',
   });
 
+  const router = useRouter();
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -25,9 +27,11 @@ export default function LoginPage() {
     }));
   };
 
+  const url = process.env.NEXT_PUBLIC_BACKEND_URL;
+
   async function loginUser(data: FormData) {
     try {
-      const res = await fetch('http://localhost:8000/auth/login', {
+      const res = await fetch(`${url}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: data.email, password: data.password }),
@@ -54,7 +58,7 @@ export default function LoginPage() {
       console.log('Usuario logueado:', result);
 
       alert('Login exitoso');
-      // router.push('/dashboard');
+      router.push('/chat');
     } catch (error: unknown) {
       console.error('Error en registro:', error);
     }
@@ -68,11 +72,11 @@ export default function LoginPage() {
         {/* Título */}
         <div className="text-center">
           <Image
-          src="/images/logo_uni.png" 
-          alt="Logo Unichatbot"
-          width={300}
-          height={100}
-          className="mx-auto mb-6"
+            src="/images/logo_uni.png"
+            alt="Logo Unichatbot"
+            width={300}
+            height={100}
+            className="mx-auto mb-6"
           />
         </div>
 

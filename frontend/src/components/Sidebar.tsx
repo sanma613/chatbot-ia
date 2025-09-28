@@ -1,17 +1,25 @@
-
 'use client';
 
 import React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { MessageSquare, Calendar, History, Bell, ChevronsRight, LogOut } from 'lucide-react';
 import Image from 'next/image';
+import { usePathname, useRouter } from 'next/navigation';
+import {
+  MessageSquare,
+  Calendar,
+  History,
+  Bell,
+  ChevronsRight,
+  LogOut,
+} from 'lucide-react';
+
+import { handleError } from '@/lib/errors';
 
 // Esto es un placeholder. Idealmente, obtendrías el usuario de una sesión.
 const useUser = () => {
-    return {
-        name: 'Emanuel',
-        };
+  return {
+    name: 'Emanuel',
+  };
 };
 
 const navItems = [
@@ -23,12 +31,12 @@ const navItems = [
 ];
 
 const UserAvatarPlaceholder = () => (
-    <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-white font-bold">
-      E{/*  primer letra del nombre */}
-    </div>
+  <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-white font-bold">
+    E{/*  primer letra del nombre */}
+  </div>
 );
 
-const NavLink = ({ item }: { item: typeof navItems[0] }) => {
+const NavLink = ({ item }: { item: (typeof navItems)[0] }) => {
   const pathname = usePathname();
   const isActive = pathname === item.href;
 
@@ -40,19 +48,47 @@ const NavLink = ({ item }: { item: typeof navItems[0] }) => {
           ? 'bg-primary text-white shadow-md'
           : 'text-dark hover:bg-gray-200 hover:text-primary'
       }`}
-        >
+    >
       <item.icon size={20} />
       <span className="ml-4 font-semibold">{item.name}</span>
-        </Link>
+    </Link>
   );
 };
 
 export default function Sidebar() {
   const user = useUser();
-  const handleLogout = () => {
-    console.log('Cerrando sesión...');
-    // Lógica para cerrar sesión
+  const router = useRouter();
+
+  const url = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+  async function logoutUser() {
+    try {
+      const res = await fetch(`${url}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.detail || 'Error cerrando sesión');
+      }
+
+      return await res.json();
+    } catch (error: unknown) {
+      handleError(error);
+      throw error;
+    }
   }
+
+  const handleLogout = async () => {
+    try {
+      console.log('Cerrando sesión...');
+      await logoutUser();
+      router.push('/');
+    } catch (error: unknown) {
+      console.error('Error en logout:', error);
+    }
+  };
 
   return (
     <aside className="w-64 flex-shrink-0 bg-white flex flex-col p-4 shadow-lg">
@@ -65,14 +101,14 @@ export default function Sidebar() {
           height={50}
         />
       </div>
-      
+
       {/* Se recorre cada item de la lista del menu */}
       <nav className="flex-1 space-y-2">
         {navItems.map((item) => (
           <NavLink key={item.name} item={item} />
         ))}
       </nav>
-    
+
       <div className="mt-auto">
         <div className="p-3 flex items-center justify-between bg-gray-100 rounded-lg">
           <div className="flex items-center">

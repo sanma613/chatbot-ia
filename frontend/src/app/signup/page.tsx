@@ -2,7 +2,7 @@
 import { handleError } from '@/lib/errors';
 import { useRouter } from 'next/navigation';
 import React, { useState, ChangeEvent, FormEvent } from 'react';
-import Image from 'next/image'
+import Image from 'next/image';
 
 interface SignupFormData {
   name: string;
@@ -31,9 +31,11 @@ export default function SignupPage() {
     }));
   };
 
+  const url = process.env.NEXT_PUBLIC_BACKEND_URL;
+
   async function registerUser(data: SignupFormData) {
     try {
-      const res = await fetch('http://localhost:8000/auth/register', {
+      const res = await fetch(`${url}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -82,7 +84,7 @@ export default function SignupPage() {
         {/* Título */}
         <div className="text-center">
           <Image
-            src="/images/logo_uni.png" 
+            src="/images/logo_uni.png"
             alt="Logo Unichatbot"
             width={300}
             height={100}
@@ -90,7 +92,7 @@ export default function SignupPage() {
           />
         </div>
         <h1 className="text-xl font-bold text-center text-primary">
-          Crear Cuenta 
+          Crear Cuenta
         </h1>
 
         {/* Formulario */}
