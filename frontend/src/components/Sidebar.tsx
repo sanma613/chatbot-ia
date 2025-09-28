@@ -15,6 +15,7 @@ import {
 
 import { useUser } from '@/hooks/useUser';
 import { handleError } from '@/lib/errors';
+import { cn } from '@/lib/Utils';
 
 // --- Items de navegación ---
 const navItems = [
@@ -43,11 +44,12 @@ const NavLink = ({ item }: { item: (typeof navItems)[0] }) => {
   return (
     <Link
       href={item.href}
-      className={`flex items-center py-6 px-3 rounded-lg transition-colors ${
+      className={cn(
+        'flex items-center py-6 px-3 rounded-lg transition-colors',
         isActive
           ? 'bg-primary text-white shadow-md'
           : 'text-dark hover:bg-gray-200 hover:text-primary'
-      }`}
+      )}
     >
       <item.icon size={20} />
       <span className="ml-4 font-semibold">{item.name}</span>

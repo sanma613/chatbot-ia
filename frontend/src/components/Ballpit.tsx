@@ -1,4 +1,5 @@
 import React, { useRef, useEffect } from 'react';
+import { cn } from '@/lib/Utils';
 import {
   Clock,
   PerspectiveCamera,
@@ -993,7 +994,7 @@ const Ballpit: React.FC<BallpitProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <canvas className={`${className} w-full h-full`} ref={canvasRef} />;
+  return <canvas className={cn(className, 'w-full h-full')} ref={canvasRef} />;
 };
 
 export default Ballpit;
