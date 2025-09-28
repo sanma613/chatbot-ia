@@ -13,29 +13,29 @@ import {
   LogOut,
 } from 'lucide-react';
 
+import { useUser } from '@/hooks/useUser';
 import { handleError } from '@/lib/errors';
 
-// Esto es un placeholder. Idealmente, obtendrías el usuario de una sesión.
-const useUser = () => {
-  return {
-    name: 'Emanuel',
-  };
-};
-
+// --- Items de navegación ---
 const navItems = [
-  { name: 'Chatbot', href: '/student', icon: MessageSquare },
-  { name: 'Calendario', href: '/student/calendar', icon: Calendar },
-  { name: 'Historial', href: '/student/history', icon: History },
-  { name: 'Notificaciones', href: '/student/notifications', icon: Bell },
-  { name: 'Escalada', href: '/student/escalate', icon: ChevronsRight },
+  { name: 'Chatbot', href: '/chat', icon: MessageSquare },
+  { name: 'Calendario', href: '/calendar', icon: Calendar },
+  { name: 'Historial', href: '/history', icon: History },
+  { name: 'Notificaciones', href: '/notifications', icon: Bell },
+  { name: 'Escalada', href: '/escalate', icon: ChevronsRight },
 ];
 
-const UserAvatarPlaceholder = () => (
-  <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-white font-bold">
-    E{/*  primer letra del nombre */}
-  </div>
-);
+// --- Avatar de usuario ---
+const UserAvatar = ({ fullName }: { fullName?: string }) => {
+  const firstLetter = fullName?.charAt(0)?.toUpperCase() || 'U';
+  return (
+    <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-white font-bold">
+      {firstLetter}
+    </div>
+  );
+};
 
+// --- Link de navegación ---
 const NavLink = ({ item }: { item: (typeof navItems)[0] }) => {
   const pathname = usePathname();
   const isActive = pathname === item.href;
@@ -55,13 +55,19 @@ const NavLink = ({ item }: { item: (typeof navItems)[0] }) => {
   );
 };
 
+// --- Sidebar ---
 export default function Sidebar() {
-  const user = useUser();
+  const { user, loading } = useUser();
   const router = useRouter();
-
   const url = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-  async function logoutUser() {
+  // Spinner mientras carga el usuario
+  if (loading) {
+    return;
+  }
+
+  // Logout
+  const logoutUser = async () => {
     try {
       const res = await fetch(`${url}/auth/logout`, {
         method: 'POST',
@@ -74,18 +80,17 @@ export default function Sidebar() {
       }
 
       return await res.json();
-    } catch (error: unknown) {
+    } catch (error) {
       handleError(error);
       throw error;
     }
-  }
+  };
 
   const handleLogout = async () => {
     try {
-      console.log('Cerrando sesión...');
       await logoutUser();
       router.push('/');
-    } catch (error: unknown) {
+    } catch (error) {
       console.error('Error en logout:', error);
     }
   };
@@ -102,18 +107,21 @@ export default function Sidebar() {
         />
       </div>
 
-      {/* Se recorre cada item de la lista del menu */}
+      {/* Navegación */}
       <nav className="flex-1 space-y-2">
         {navItems.map((item) => (
           <NavLink key={item.name} item={item} />
         ))}
       </nav>
 
+      {/* Usuario */}
       <div className="mt-auto">
         <div className="p-3 flex items-center justify-between bg-gray-100 rounded-lg">
           <div className="flex items-center">
-            <UserAvatarPlaceholder />
-            <span className="ml-3 font-bold text-dark">{user.name}</span>
+            <UserAvatar fullName={user?.full_name} />
+            <span className="ml-3 font-bold text-dark">
+              {user?.full_name || 'Usuario'}
+            </span>
           </div>
           <button
             onClick={handleLogout}

@@ -49,3 +49,18 @@ def login_user(email: str, password: str):
                 status_code=401, detail="Email o contraseña incorrectos"
             )
         raise HTTPException(status_code=400, detail=f"Error en login: {error_msg}")
+
+
+def get_user_info(user: str):
+    """Obtener información del usuario desde la tabla profiles"""
+    user_id = user.id
+    profile = (
+        supabase_.table("profiles").select("*").eq("id", user_id).single().execute()
+    )
+
+    if not profile.data:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    user_data = user.model_dump()
+    response = {**user_data, **profile.data}
+    return response

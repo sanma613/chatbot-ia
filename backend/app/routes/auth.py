@@ -2,7 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, Response, Cookie
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 
-from app.services.auth_services import get_user_from_token, register_user, login_user
+from app.services.auth_services import (
+    get_user_from_token,
+    register_user,
+    login_user,
+    get_user_info,
+)
 
 router = APIRouter()
 security = HTTPBearer()
@@ -40,7 +45,7 @@ def get_current_user(access_token: str | None = Cookie(default=None)):
 @router.get("/me", response_model=MeResponse)
 def get_me(user=Depends(get_current_user)):
     """Obtener información del usuario autenticado"""
-    return {"message": "Access granted", "user": user.model_dump()}
+    return {"message": "Usuario autenticado", "user": get_user_info(user)}
 
 
 @router.post("/register")
