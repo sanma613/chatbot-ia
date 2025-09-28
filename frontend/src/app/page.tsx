@@ -50,7 +50,7 @@ export default function LandingPage() {
 
         {/* Contenido de texto superpuesto */}
         <div className="relative z-10 text-center max-w-2xl mx-auto p-4">
-          <h1 className="text-5xl font-bold text-primary mb-4">
+          <h1 className="text-5xl font-bold text-secondary mb-4">
             Bienvenido a UniChatbot
           </h1>
           <p className="bg-white/20 backdrop-blur-sm rounded-xl p-6 text-primary-dark mb-8">
@@ -60,7 +60,7 @@ export default function LandingPage() {
           </p>
           <Link
             href="/signup"
-            className="bg-primary text-white font-bold py-3 px-8 rounded-lg hover:bg-primary-dark transition-colors text-lg"
+            className="bg-secondary text-white font-bold py-3 px-8 rounded-lg hover:bg-secondary-dark transition-colors text-lg"
           >
             Comienza Ahora
           </Link>
