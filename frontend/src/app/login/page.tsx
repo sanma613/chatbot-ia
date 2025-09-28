@@ -1,6 +1,7 @@
 'use client';
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useState } from 'react';
 import { ChangeEvent, FormEvent } from 'react';
 import { handleError } from '@/lib/errors';
@@ -66,7 +67,13 @@ export default function LoginPage() {
       <div className="w-full max-w-md p-8 space-y-6 bg-light rounded-2xl shadow-lg">
         {/* Título */}
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-primary">Logo</h1>
+          <Image
+          src="/images/logo_uni.png" 
+          alt="Logo Unichatbot"
+          width={300}
+          height={100}
+          className="mx-auto mb-6"
+          />
         </div>
 
         {/* Formulario de Login */}
