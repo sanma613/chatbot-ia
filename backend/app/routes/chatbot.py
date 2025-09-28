@@ -1,4 +1,5 @@
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
@@ -22,7 +23,9 @@ class QuestionsListResponse(BaseModel):
 
 
 @router.get("/list-questions", response_model=QuestionsListResponse)
-def list_questions(user: Any = Depends(get_current_user)) -> Dict[str, List[QuestionResponse]]:
+def list_questions(
+    user: Any = Depends(get_current_user),
+) -> Dict[str, List[QuestionResponse]]:
     """Endpoint para listar preguntas frecuentes desde la base de datos"""
     questions = get_questions_from_db()
     return {
@@ -33,7 +36,9 @@ def list_questions(user: Any = Depends(get_current_user)) -> Dict[str, List[Ques
 
 
 @router.get("/get_answer/{question_id}")
-def get_answer(question_id: int, user: Any = Depends(get_current_user)) -> Dict[str, Any]:
+def get_answer(
+    question_id: int, user: Any = Depends(get_current_user)
+) -> Dict[str, Any]:
     """Endpoint para obtener la respuesta a una pregunta frecuente por su ID"""
     answer = get_answer_by_question_id(question_id)
     if answer is None:

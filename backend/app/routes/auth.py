@@ -1,4 +1,5 @@
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel
