@@ -3,6 +3,8 @@ import { handleError } from '@/lib/errors';
 import { useRouter } from 'next/navigation';
 import React, { useState, ChangeEvent, FormEvent } from 'react';
 import Image from 'next/image';
+import { useNotification } from '@/hooks/useNotification';
+import NotificationModal from '@/components/modals/NotificationModal';
 
 interface SignupFormData {
   name: string;
@@ -22,6 +24,7 @@ export default function SignupPage() {
   });
 
   const router = useRouter();
+  const { notification, showSuccess, showError, hideNotification } = useNotification();
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -62,17 +65,48 @@ export default function SignupPage() {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
+    // Validaciones del formulario
     if (formData.password !== formData.confirmPassword) {
-      alert('Contraseñas no coinciden');
+      showError(
+        'Error de validación',
+        'Las contraseñas no coinciden. Por favor verifica que ambas contraseñas sean idénticas.'
+      );
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      showError(
+        'Contraseña muy corta',
+        'La contraseña debe tener al menos 6 caracteres para garantizar la seguridad de tu cuenta.'
+      );
+      return;
+    }
+
+    if (!formData.name.trim()) {
+      showError(
+        'Campo requerido',
+        'El nombre completo es obligatorio. Por favor ingresa tu nombre.'
+      );
       return;
     }
 
     try {
-      await registerUser(formData); // ya no necesitas guardar token
-      alert('Usuario registrado correctamente');
-      router.push('/login');
+      await registerUser(formData);
+      showSuccess(
+        '¡Registro exitoso!',
+        'Tu cuenta ha sido creada correctamente. Serás redirigido al login para iniciar sesión.'
+      );
+      
+      // Redirigir después de un breve delay para que el usuario vea la notificación
+      setTimeout(() => {
+        router.push('/login');
+      }, 2000);
     } catch (error: unknown) {
       console.error('Error en registro:', error);
+      showError(
+        'Error de registro',
+        'No se pudo crear tu cuenta. Por favor verifica tus datos e intenta nuevamente.'
+      );
     }
   };
 
@@ -194,6 +228,17 @@ export default function SignupPage() {
           </button>
         </form>
       </div>
+      
+      {/* Modal de Notificación */}
+      {notification && notification.isOpen && (
+        <NotificationModal
+          isOpen={true}
+          onClose={hideNotification}
+          type={notification.type}
+          title={notification.title}
+          message={notification.message}
+        />
+      )}
     </main>
   );
 }

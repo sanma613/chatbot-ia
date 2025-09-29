@@ -5,7 +5,8 @@ import Image from 'next/image';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChangeEvent, FormEvent } from 'react';
-import { handleError } from '@/lib/errors';
+import { useNotification } from '@/hooks/useNotification';
+import NotificationModal from '@/components/modals/NotificationModal';
 
 interface FormData {
   email: string;
@@ -19,6 +20,7 @@ export default function LoginPage() {
   });
 
   const router = useRouter();
+  const { notification, showSuccess, showError, hideNotification } = useNotification();
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -45,7 +47,6 @@ export default function LoginPage() {
 
       return await res.json();
     } catch (error: unknown) {
-      handleError(error);
       throw error;
     }
   }
@@ -57,10 +58,33 @@ export default function LoginPage() {
       const result = await loginUser(formData);
       console.log('Usuario logueado:', result);
 
-      alert('Login exitoso');
-      router.push('/chat');
+      showSuccess(
+        '¡Bienvenido!', 
+        'Has iniciado sesión correctamente. Serás redirigido en unos momentos.'
+      );
+
+      // Redirigir después de mostrar el mensaje de éxito
+      setTimeout(() => {
+        router.push('/chat');
+      }, 2000);
+
     } catch (error: unknown) {
-      console.error('Error en registro:', error);
+      console.error('Error en login:', error);
+      
+      // Mostrar error personalizado según el tipo
+      if (error instanceof Error) {
+        showError(
+          'Error de Autenticación',
+          error.message === 'Credenciales inválidas' 
+            ? 'El correo electrónico o la contraseña son incorrectos. Por favor, verifica tus datos e intenta nuevamente.'
+            : 'Ocurrió un problema al iniciar sesión. Por favor, intenta nuevamente.'
+        );
+      } else {
+        showError(
+          'Error Inesperado',
+          'Ha ocurrido un error inesperado. Por favor, intenta nuevamente.'
+        );
+      }
     }
   };
 
@@ -139,6 +163,17 @@ export default function LoginPage() {
           </Link>
         </p>
       </div>
+      
+      {/* Modal de Notificación */}
+      {notification && notification.isOpen && (
+        <NotificationModal
+          isOpen={true}
+          onClose={hideNotification}
+          type={notification.type}
+          title={notification.title}
+          message={notification.message}
+        />
+      )}
     </div>
   );
 }
