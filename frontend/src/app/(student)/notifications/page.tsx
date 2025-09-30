@@ -62,7 +62,7 @@ export default function NotificationsPage() {
     useEffect(() => {
         const generatedNotifications = generateNotifications(activities);
         setNotifications(generatedNotifications);
-    }, []); // Solo ejecutar una vez al montar el componente
+    }, [activities]); // Se ejecuta cuando cambian las actividades
 
     // Filtrar notificaciones
     const filteredNotifications = notifications.filter(notification => {
@@ -103,6 +103,7 @@ export default function NotificationsPage() {
         }
 
         // Actualizar el estado de la actividad a 'completed'
+        // El useEffect se encargará de regenerar las notificaciones automáticamente
         setActivities(prev => 
             prev.map(activity => 
                 activity.id === activityId 
@@ -110,33 +111,6 @@ export default function NotificationsPage() {
                     : activity
             )
         );
-
-        // Eliminar notificaciones relacionadas con esta actividad (reminder, upcoming, overdue)
-        setNotifications(prev => 
-            prev.filter(notification => 
-                !(notification.activityId === activityId && 
-                  ['reminder', 'upcoming', 'overdue'].includes(notification.type))
-            )
-        );
-
-        // Crear nueva notificación de completado
-        const completionNotification: Notification = {
-            id: `completed-${activityId}-${Date.now()}`,
-            title: 'Actividad Completada',
-            message: `¡Excelente! Has completado: ${activityToComplete.title}`,
-            type: 'completed',
-            activityId: activityId,
-            activityTitle: activityToComplete.title,
-            date: activityToComplete.date,
-            time: activityToComplete.time,
-            location: activityToComplete.location,
-            isRead: false,
-            createdAt: new Date().toISOString(),
-            dueDate: activityToComplete.date
-        };
-
-        // Agregar la notificación de completado al principio
-        setNotifications(prev => [completionNotification, ...prev]);
 
         // Mostrar toast de éxito
         showSuccess(
