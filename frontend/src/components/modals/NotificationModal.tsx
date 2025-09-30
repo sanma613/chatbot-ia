@@ -83,10 +83,10 @@ const NotificationModal = ({
                 return {
                     bgColor: 'bg-gray-50',
                     borderColor: 'border-gray-200',
-                    iconColor: 'text-gray-600',
-                    titleColor: 'text-gray-800',
-                    messageColor: 'text-gray-700',
-                    buttonColor: 'hover:bg-gray-100 text-gray-600',
+                    iconColor: 'text-dark',
+                    titleColor: 'text-dark',
+                    messageColor: 'text-dark',
+                    buttonColor: 'hover:bg-gray-100 text-dark',
                     Icon: Info
                 };
         }

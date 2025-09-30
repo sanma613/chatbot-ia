@@ -23,12 +23,12 @@ export default function UnauthorizedPage({
                 </div>
                 
                 {/* Título */}
-                <h1 className="text-2xl font-bold text-gray-900 mb-4">
+                <h1 className="text-2xl font-bold text-dark mb-4">
                     {title}
                 </h1>
                 
                 {/* Mensaje */}
-                <p className="text-gray-600 mb-8 leading-relaxed">
+                <p className="text-dark mb-8 leading-relaxed">
                     {message}
                 </p>
                 
@@ -53,7 +53,7 @@ export default function UnauthorizedPage({
                         href="/"
                         className={cn(
                             "w-full inline-flex items-center justify-center gap-2",
-                            "px-6 py-3 border border-gray-300 text-gray-700 rounded-lg",
+                            "px-6 py-3 border border-gray-300 text-dark rounded-lg",
                             "hover:bg-gray-50 transition-colors"
                         )}
                     >
