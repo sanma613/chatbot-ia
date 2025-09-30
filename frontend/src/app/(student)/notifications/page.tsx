@@ -7,6 +7,8 @@ import NotificationCard from '@/components/notifications/NotificationCard';
 import NotificationStats from '@/components/notifications/NotificationStats';
 import EmptyNotifications from '@/components/notifications/EmptyNotifications';
 import { generateNotifications } from '@/utils/notificationGenerator';
+import { useToast } from '@/hooks/useToast';
+import Toast from '@/components/Toast';
 
 // Mock data basado en las actividades del calendario
 const mockActivities: ActivityStatus[] = [
@@ -52,14 +54,15 @@ const mockActivities: ActivityStatus[] = [
 ];
 
 export default function NotificationsPage() {
-    const [activities] = useState<ActivityStatus[]>(mockActivities);
+    const [activities, setActivities] = useState<ActivityStatus[]>(mockActivities);
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [filter, setFilter] = useState<NotificationFilter>('all');
+    const { toast, showSuccess, hideToast } = useToast();
 
     useEffect(() => {
         const generatedNotifications = generateNotifications(activities);
         setNotifications(generatedNotifications);
-    }, [activities]);
+    }, []); // Solo ejecutar una vez al montar el componente
 
     // Filtrar notificaciones
     const filteredNotifications = notifications.filter(notification => {
@@ -90,9 +93,56 @@ export default function NotificationsPage() {
     // Marcar actividad como completada
     const markActivityAsCompleted = (activityId: string) => {
         console.log("Enviar notificación"); // Como solicitaste
-        // Aquí actualizarías el estado de la actividad en el calendario
-        // Por ahora solo simulamos la acción
-        console.log(`Actividad ${activityId} marcada como completada`);
+        
+        // Encontrar la actividad antes de actualizarla
+        const activityToComplete = activities.find(activity => activity.id === activityId);
+        
+        if (!activityToComplete) {
+            console.error(`Actividad con ID ${activityId} no encontrada`);
+            return;
+        }
+
+        // Actualizar el estado de la actividad a 'completed'
+        setActivities(prev => 
+            prev.map(activity => 
+                activity.id === activityId 
+                    ? { ...activity, status: 'completed' as const }
+                    : activity
+            )
+        );
+
+        // Eliminar notificaciones relacionadas con esta actividad (reminder, upcoming, overdue)
+        setNotifications(prev => 
+            prev.filter(notification => 
+                !(notification.activityId === activityId && 
+                  ['reminder', 'upcoming', 'overdue'].includes(notification.type))
+            )
+        );
+
+        // Crear nueva notificación de completado
+        const completionNotification: Notification = {
+            id: `completed-${activityId}-${Date.now()}`,
+            title: 'Actividad Completada',
+            message: `¡Excelente! Has completado: ${activityToComplete.title}`,
+            type: 'completed',
+            activityId: activityId,
+            activityTitle: activityToComplete.title,
+            date: activityToComplete.date,
+            time: activityToComplete.time,
+            location: activityToComplete.location,
+            isRead: false,
+            createdAt: new Date().toISOString(),
+            dueDate: activityToComplete.date
+        };
+
+        // Agregar la notificación de completado al principio
+        setNotifications(prev => [completionNotification, ...prev]);
+
+        // Mostrar toast de éxito
+        showSuccess(
+            'Actividad Completada',
+            `Has marcado "${activityToComplete.title}" como completada`
+        );
     };
 
 
@@ -144,6 +194,19 @@ export default function NotificationsPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Toast de feedback */}
+            {toast && (
+                <Toast
+                    title={toast.title}
+                    message={toast.message}
+                    type={toast.type}
+                    isVisible={toast.isVisible}
+                    onClose={hideToast}
+                    autoClose={true}
+                    duration={3000}
+                />
+            )}
         </div>
     );
 }

@@ -1,5 +1,6 @@
 import clsx from 'clsx';
-import { Bell, Clock, CheckCircle, X, Calendar, MapPin, AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
+import { Bell, Clock, CheckCircle, X, Calendar, MapPin, AlertTriangle, Loader2 } from 'lucide-react';
 import { Notification } from '@/types/notifications';
 
 interface NotificationCardProps {
@@ -15,6 +16,18 @@ export default function NotificationCard({
     onDismiss,
     onMarkCompleted
 }: NotificationCardProps) {
+    const [isCompleting, setIsCompleting] = useState(false);
+    
+    // Manejar marcar como completada con estado de carga
+    const handleMarkCompleted = async (activityId: string) => {
+        setIsCompleting(true);
+        try {
+            await new Promise(resolve => setTimeout(resolve, 500)); // Simular delay
+            onMarkCompleted(activityId);
+        } finally {
+            setIsCompleting(false);
+        }
+    };
     
     // Obtener icono según el tipo
     const getNotificationIcon = (type: Notification['type']) => {
@@ -112,10 +125,18 @@ export default function NotificationCard({
                             
                             {(notification.type === 'reminder' || notification.type === 'upcoming') && (
                                 <button
-                                    onClick={() => onMarkCompleted(notification.activityId)}
-                                    className="px-3 py-1.5 bg-green-100 text-green-800 rounded-md text-sm font-medium hover:bg-green-200 transition-colors"
+                                    onClick={() => handleMarkCompleted(notification.activityId)}
+                                    disabled={isCompleting}
+                                    className={clsx(
+                                        "px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2",
+                                        {
+                                            "bg-green-100 text-green-800 hover:bg-green-200": !isCompleting,
+                                            "bg-gray-100 text-gray-500 cursor-not-allowed": isCompleting
+                                        }
+                                    )}
                                 >
-                                    Marcar como completada
+                                    {isCompleting && <Loader2 className="w-4 h-4 animate-spin" />}
+                                    {isCompleting ? 'Completando...' : 'Marcar como completada'}
                                 </button>
                             )}
                             
