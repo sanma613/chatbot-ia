@@ -39,16 +39,16 @@ export default function Toast({
     return (
         <div
             className={clsx(
-                'fixed top-4 right-4 z-50 transition-all duration-300 ease-in-out transform',
+                'fixed top-1/2 left-1/2 z-50 transition-all duration-300 ease-in-out transform -translate-x-1/2 -translate-y-1/2',
                 {
-                    'opacity-100 translate-y-0': isVisible,
-                    'opacity-0 -translate-y-2 pointer-events-none': !isVisible
+                    'opacity-100 scale-100': isVisible,
+                    'opacity-0 scale-95 pointer-events-none': !isVisible
                 }
             )}
         >
             <div
                 className={clsx(
-                    'min-w-80 max-w-md p-4 rounded-lg shadow-lg border backdrop-blur-sm',
+                    'min-w-96 max-w-lg p-6 rounded-xl shadow-2xl border backdrop-blur-sm',
                     {
                         'bg-green-50/95 border-green-200 text-green-800': type === 'success',
                         'bg-red-50/95 border-red-200 text-red-800': type === 'error',
