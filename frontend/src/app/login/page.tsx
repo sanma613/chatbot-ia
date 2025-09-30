@@ -3,10 +3,10 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ChangeEvent, FormEvent } from 'react';
-import { useNotification } from '@/hooks/useNotification';
-import NotificationModal from '@/components/modals/NotificationModal';
+import { useToast } from '@/hooks/useToast';
+import Toast from '@/components/Toast';
 
 interface FormData {
   email: string;
@@ -20,7 +20,11 @@ export default function LoginPage() {
   });
 
   const router = useRouter();
-  const { notification, showSuccess, showError, hideNotification } = useNotification();
+  const searchParams = useSearchParams();
+  const { toast, showSuccess, showError, hideToast } = useToast();
+  
+  // Obtener la URL de redirección si existe
+  const redirectUrl = searchParams.get('redirect') || '/chat';
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -65,7 +69,7 @@ export default function LoginPage() {
 
       // Redirigir después de mostrar el mensaje de éxito
       setTimeout(() => {
-        router.push('/chat');
+        router.push(redirectUrl);
       }, 2000);
 
     } catch (error: unknown) {
@@ -164,14 +168,14 @@ export default function LoginPage() {
         </p>
       </div>
       
-      {/* Modal de Notificación */}
-      {notification && notification.isOpen && (
-        <NotificationModal
-          isOpen={true}
-          onClose={hideNotification}
-          type={notification.type}
-          title={notification.title}
-          message={notification.message}
+      {/* Toast de Notificación */}
+      {toast && (
+        <Toast
+          isVisible={toast.isVisible}
+          onClose={hideToast}
+          type={toast.type}
+          title={toast.title}
+          message={toast.message}
         />
       )}
     </div>
