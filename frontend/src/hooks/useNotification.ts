@@ -15,38 +15,49 @@ interface UseNotificationReturn {
 export function useNotification(): UseNotificationReturn {
   const [notification, setNotification] = useState<Notification | null>(null);
 
-  const showNotification = useCallback((
-    type: NotificationType,
-    title: string,
-    message: string
-  ) => {
-    setNotification({
-      type,
-      title,
-      message,
-      isOpen: true,
-    });
-  }, []);
+  const showNotification = useCallback(
+    (type: NotificationType, title: string, message: string) => {
+      setNotification({
+        type,
+        title,
+        message,
+        isOpen: true,
+      });
+    },
+    []
+  );
 
   const hideNotification = useCallback(() => {
     setNotification(null);
   }, []);
 
-  const showSuccess = useCallback((title: string, message: string) => {
-    showNotification('success', title, message);
-  }, [showNotification]);
+  const showSuccess = useCallback(
+    (title: string, message: string) => {
+      showNotification('success', title, message);
+    },
+    [showNotification]
+  );
 
-  const showError = useCallback((title: string, message: string) => {
-    showNotification('error', title, message);
-  }, [showNotification]);
+  const showError = useCallback(
+    (title: string, message: string) => {
+      showNotification('error', title, message);
+    },
+    [showNotification]
+  );
 
-  const showWarning = useCallback((title: string, message: string) => {
-    showNotification('warning', title, message);
-  }, [showNotification]);
+  const showWarning = useCallback(
+    (title: string, message: string) => {
+      showNotification('warning', title, message);
+    },
+    [showNotification]
+  );
 
-  const showInfo = useCallback((title: string, message: string) => {
-    showNotification('info', title, message);
-  }, [showNotification]);
+  const showInfo = useCallback(
+    (title: string, message: string) => {
+      showNotification('info', title, message);
+    },
+    [showNotification]
+  );
 
   return {
     notification,

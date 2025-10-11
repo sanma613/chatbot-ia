@@ -22,7 +22,7 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast, showSuccess, showError, hideToast } = useToast();
-  
+
   // Obtener la URL de redirección si existe
   const redirectUrl = searchParams.get('redirect') || '/chat';
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -63,7 +63,7 @@ export default function LoginPage() {
       console.log('Usuario logueado:', result);
 
       showSuccess(
-        '¡Bienvenido!', 
+        '¡Bienvenido!',
         'Has iniciado sesión correctamente. Serás redirigido en unos momentos.'
       );
 
@@ -71,15 +71,14 @@ export default function LoginPage() {
       setTimeout(() => {
         router.push(redirectUrl);
       }, 2000);
-
     } catch (error: unknown) {
       console.error('Error en login:', error);
-      
+
       // Mostrar error personalizado según el tipo
       if (error instanceof Error) {
         showError(
           'Error de Autenticación',
-          error.message === 'Credenciales inválidas' 
+          error.message === 'Credenciales inválidas'
             ? 'El correo electrónico o la contraseña son incorrectos. Por favor, verifica tus datos e intenta nuevamente.'
             : 'Ocurrió un problema al iniciar sesión. Por favor, intenta nuevamente.'
         );
@@ -167,7 +166,7 @@ export default function LoginPage() {
           </Link>
         </p>
       </div>
-      
+
       {/* Toast de Notificación */}
       {toast && (
         <Toast

@@ -24,7 +24,8 @@ export default function SignupPage() {
   });
 
   const router = useRouter();
-  const { notification, showSuccess, showError, hideNotification } = useNotification();
+  const { notification, showSuccess, showError, hideNotification } =
+    useNotification();
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -96,7 +97,7 @@ export default function SignupPage() {
         '¡Registro exitoso!',
         'Tu cuenta ha sido creada correctamente. Serás redirigido al login para iniciar sesión.'
       );
-      
+
       // Redirigir después de un breve delay para que el usuario vea la notificación
       setTimeout(() => {
         router.push('/login');
@@ -228,7 +229,7 @@ export default function SignupPage() {
           </button>
         </form>
       </div>
-      
+
       {/* Modal de Notificación */}
       {notification && notification.isOpen && (
         <NotificationModal
