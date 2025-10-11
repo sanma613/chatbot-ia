@@ -220,7 +220,7 @@ If **ANY** answer is NO, use the "I don't know" response instead.
                 {"role": "user", "content": user_question},
             ],
             temperature=0.25,  # Temperatura baja para respuestas más determinísticas
-            max_tokens=500,
+            max_tokens=1000,
         )
 
         model_answer = completion.choices[0].message.content.strip()
