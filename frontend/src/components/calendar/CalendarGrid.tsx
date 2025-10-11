@@ -57,9 +57,9 @@ export default function CalendarGrid({
   return (
     <div className="grid grid-cols-7 gap-1">
       {/* Días de la semana */}
-      {weekDays.map((day) => (
+      {weekDays.map((day, index) => (
         <div
-          key={day}
+          key={index}
           className="p-4 text-center font-semibold text-dark bg-gray-50"
         >
           {day}
