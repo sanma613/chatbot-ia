@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, Paperclip, Send } from 'lucide-react';
 import Image from 'next/image';
+import ReactMarkdown from 'react-markdown';
 import { useUser } from '@/hooks/useUser';
 import { cn } from '@/lib/Utils';
 
@@ -68,7 +69,7 @@ export default function ChatInterface() {
               id: Date.now(),
               sender: 'UniBot',
               avatar: '/images/logo_uni.png',
-              text: `¡Hola! Soy UniBot 🤖. Estas son algunas preguntas frecuentes que puedo responder:\n\n${enumerated}\n\nTambién puedes escribirme "agente" para hablar con un humano. 👇`,
+              text: `¡Hola! Soy UniBot 🤖. Estas son algunas preguntas frecuentes que puedo responder:\n\n${enumerated}\n`,
               timestamp: new Date().toLocaleTimeString([], {
                 hour: '2-digit',
                 minute: '2-digit',
@@ -253,17 +254,81 @@ export default function ChatInterface() {
               )}
 
               <div
-                className={cn(
-                  'relative max-w-lg p-4 rounded-2xl whitespace-pre-wrap break-words',
-                  {
-                    'bg-primary text-white rounded-tr-none shadow-md':
-                      msg.sender === 'user',
-                    'bg-gray-100 text-dark rounded-tl-none border border-gray shadow-sm':
-                      msg.sender !== 'user',
-                  }
-                )}
+                className={cn('relative max-w-lg p-4 rounded-2xl break-words', {
+                  'bg-primary text-white rounded-tr-none shadow-md':
+                    msg.sender === 'user',
+                  'bg-gray-100 text-dark rounded-tl-none border border-gray shadow-sm':
+                    msg.sender !== 'user',
+                })}
               >
-                <p>{msg.text}</p>
+                {msg.sender === 'UniBot' ? (
+                  <div className="prose prose-sm max-w-none prose-headings:mt-2 prose-headings:mb-2 prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5">
+                    <ReactMarkdown
+                      components={{
+                        h1: ({ children }) => (
+                          <h1 className="text-xl font-bold text-dark mb-2 mt-2">
+                            {children}
+                          </h1>
+                        ),
+                        h2: ({ children }) => (
+                          <h2 className="text-lg font-bold text-dark mb-2 mt-2">
+                            {children}
+                          </h2>
+                        ),
+                        h3: ({ children }) => (
+                          <h3 className="text-base font-bold text-dark mb-2 mt-2">
+                            {children}
+                          </h3>
+                        ),
+                        p: ({ children }) => (
+                          <p className="text-dark mb-2 leading-relaxed whitespace-pre-wrap">
+                            {children}
+                          </p>
+                        ),
+                        strong: ({ children }) => (
+                          <strong className="font-bold text-dark">
+                            {children}
+                          </strong>
+                        ),
+                        em: ({ children }) => (
+                          <em className="italic text-dark">{children}</em>
+                        ),
+                        ul: ({ children }) => (
+                          <ul className="list-disc list-inside space-y-1 my-2">
+                            {children}
+                          </ul>
+                        ),
+                        ol: ({ children }) => (
+                          <ol className="list-decimal list-inside space-y-1 my-2">
+                            {children}
+                          </ol>
+                        ),
+                        li: ({ children }) => (
+                          <li className="text-dark">{children}</li>
+                        ),
+                        blockquote: ({ children }) => (
+                          <blockquote className="border-l-4 border-primary pl-4 py-2 my-2 bg-blue-50 rounded">
+                            {children}
+                          </blockquote>
+                        ),
+                        code: ({ children }) => (
+                          <code className="bg-gray-200 px-2 py-1 rounded text-sm font-mono text-primary">
+                            {children}
+                          </code>
+                        ),
+                        pre: ({ children }) => (
+                          <pre className="bg-gray-800 text-gray-100 p-3 rounded-lg overflow-x-auto my-2">
+                            {children}
+                          </pre>
+                        ),
+                      }}
+                    >
+                      {msg.text}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <p className="whitespace-pre-wrap">{msg.text}</p>
+                )}
                 <span
                   className={cn('text-xs mt-2 block', {
                     'text-blue-200': msg.sender === 'user',

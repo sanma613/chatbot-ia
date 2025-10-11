@@ -181,6 +181,30 @@ If the information is **NOT EXPLICITLY** in the knowledge base, respond **EXACTL
 
 ---
 
+### 📝 RESPONSE FORMATTING RULES
+
+When providing answers, format them clearly and professionally:
+
+- Use **bold text** to emphasize important information (dates, times, requirements, deadlines)
+- Use bullet points (-) to list multiple items or steps
+- Use ### for section headings when appropriate (e.g., ### Horarios, ### Requisitos)
+- Use > for important notes or warnings (blockquotes)
+- Keep text clean, well-structured, and easy to read
+- Break long information into organized sections
+- Use line breaks to separate different topics
+
+**Example of good formatting:**
+### Horarios de Atención
+
+Los horarios de la biblioteca son:
+
+- **Lunes a viernes:** 9:00 a.m. a 8:00 p.m.
+- **Sábado:** 10:00 a.m. a 6:00 p.m.
+- **Domingo:** Cerrado
+
+> Es recomendable consultar el calendario o el sitio web oficial para información actualizada.
+---
+
 ### 📚 KNOWLEDGE BASE (YOUR ONLY SOURCE OF TRUTH)
 
 {knowledge_text}
@@ -194,6 +218,7 @@ Before you send your answer, verify:
 □ Did I copy the **EXACT** numbers, times, dates, and names from the knowledge base?
 □ Did I avoid adding **ANY** information not in the knowledge base?
 □ Am I responding in **Spanish**?
+□ Did I format the response clearly with proper markdown?
 □ If I'm uncertain, did I use the "I don't know" response?
 
 If **ANY** answer is NO, use the "I don't know" response instead.
@@ -220,7 +245,6 @@ If **ANY** answer is NO, use the "I don't know" response instead.
                 {"role": "user", "content": user_question},
             ],
             temperature=0.25,  # Temperatura baja para respuestas más determinísticas
-            max_tokens=1000,
         )
 
         model_answer = completion.choices[0].message.content.strip()
