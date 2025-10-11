@@ -10,6 +10,7 @@ class Config:
     SUPABASE_URL = os.getenv("SUPABASE_URL")
     SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
     SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 
 class DevelopmentConfig(Config):

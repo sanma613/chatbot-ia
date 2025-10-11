@@ -33,8 +33,8 @@ export default function ChatInterface() {
   const [inputValue, setInputValue] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [blocked, setBlocked] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const [blocked, setBlocked] = useState(false); // nuevo estado
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -44,12 +44,12 @@ export default function ChatInterface() {
     scrollToBottom();
   }, [messages]);
 
-  // Traer preguntas frecuentes
+  // 🔹 Cargar FAQs desde el backend
   useEffect(() => {
     async function fetchQuestions() {
       const url = process.env.NEXT_PUBLIC_BACKEND_URL;
       try {
-        const res = await fetch(`${url}/chatbot/list-questions`, {
+        const res = await fetch(`${url}/faq/list-questions`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -58,6 +58,7 @@ export default function ChatInterface() {
         if (res.ok) {
           const data = await res.json();
           setQuestions(data.questions);
+
           const enumerated = data.questions
             .map((q: Question, i: number) => `${i + 1}. ${q.question}`)
             .join('\n');
@@ -67,7 +68,7 @@ export default function ChatInterface() {
               id: Date.now(),
               sender: 'UniBot',
               avatar: '/images/logo_uni.png',
-              text: `¡Hola! Soy UniBot 🤖. Estas son algunas preguntas frecuentes que puedo responder:\n\n${enumerated}\n\nResponde con el número de la pregunta que te interese o escribe "agente" para hablar con un humano. 👇`,
+              text: `¡Hola! Soy UniBot 🤖. Estas son algunas preguntas frecuentes que puedo responder:\n\n${enumerated}\n\nTambién puedes escribirme "agente" para hablar con un humano. 👇`,
               timestamp: new Date().toLocaleTimeString([], {
                 hour: '2-digit',
                 minute: '2-digit',
@@ -91,10 +92,11 @@ export default function ChatInterface() {
     );
   }
 
-  const sendToBackend = async (questionId: number) => {
+  // 🔹 Enviar pregunta de FAQ
+  const sendFaqToBackend = async (questionId: number) => {
     const url = process.env.NEXT_PUBLIC_BACKEND_URL;
     try {
-      const res = await fetch(`${url}/chatbot/get_answer/${questionId}`, {
+      const res = await fetch(`${url}/faq/get_answer/${questionId}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -103,7 +105,6 @@ export default function ChatInterface() {
       if (res.ok) {
         const data = await res.json();
 
-        // Respuesta del bot
         setMessages((prev: Message[]) => [
           ...prev,
           {
@@ -116,12 +117,49 @@ export default function ChatInterface() {
               minute: '2-digit',
             }),
           },
-          // Pregunta de seguimiento
+        ]);
+      }
+    } catch (error) {
+      console.error('Error fetching FAQ answer:', error);
+    }
+  };
+
+  // 🔹 Enviar pregunta libre al chatbot académico
+  const sendToAcademicChatbot = async (question: string) => {
+    const url = process.env.NEXT_PUBLIC_BACKEND_URL;
+    try {
+      const res = await fetch(`${url}/chatbot/ask`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ question }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const answerText = data.answer;
+
+        setMessages((prev: Message[]) => [
+          ...prev,
           {
-            id: Date.now() + 1,
+            id: Date.now(),
             sender: 'UniBot',
             avatar: '/images/logo_uni.png',
-            text: '¿Puedo ayudarte con algo más? Responde con el número de otra pregunta o escribe "agente" para hablar con un humano.',
+            text: answerText,
+            timestamp: new Date().toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+          },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now(),
+            sender: 'UniBot',
+            avatar: '/images/logo_uni.png',
+            text: 'Hubo un problema al procesar tu consulta. Intenta nuevamente más tarde.',
             timestamp: new Date().toLocaleTimeString([], {
               hour: '2-digit',
               minute: '2-digit',
@@ -130,12 +168,13 @@ export default function ChatInterface() {
         ]);
       }
     } catch (error) {
-      console.error('Error fetching answer:', error);
+      console.error('Error sending message to academic chatbot:', error);
     }
   };
 
+  // 🔹 Manejo del envío de mensajes
   const handleSendMessage = () => {
-    if (inputValue.trim() === '' || blocked) return; // bloquea si está en true
+    if (inputValue.trim() === '' || blocked) return;
 
     const newMessage: Message = {
       id: Date.now(),
@@ -151,27 +190,26 @@ export default function ChatInterface() {
 
     const trimmed = inputValue.trim().toLowerCase();
 
-    // Escalar a agente
     if (trimmed === 'agente') {
-      setInputValue(''); // limpia input
-      setBlocked(true); // bloquea usuario
+      setBlocked(true);
       setMessages((prev) => [
         ...prev,
         {
           id: Date.now() + 1,
           sender: 'UniBot',
           avatar: '/images/logo_uni.png',
-          text: 'Has decidido escalar a un agente humano. Por favor espera un momento...',
+          text: 'Has solicitado hablar con un agente humano. Por favor espera mientras te conectamos...',
           timestamp: new Date().toLocaleTimeString([], {
             hour: '2-digit',
             minute: '2-digit',
           }),
         },
       ]);
+      setInputValue('');
       return;
     }
 
-    const selectedNumber = parseInt(inputValue, 10);
+    const selectedNumber = parseInt(trimmed, 10);
 
     if (
       !isNaN(selectedNumber) &&
@@ -179,35 +217,22 @@ export default function ChatInterface() {
       selectedNumber <= questions.length
     ) {
       const selectedQuestion = questions[selectedNumber - 1];
-      sendToBackend(selectedQuestion.id);
+      sendFaqToBackend(selectedQuestion.id);
     } else {
-      setMessages((prev: Message[]) => [
-        ...prev,
-        {
-          id: Date.now() + 1,
-          sender: 'UniBot',
-          avatar: '/images/logo_uni.png',
-          text: 'No reconozco ese número 😅. Por favor, ingresa un número válido de la lista o escribe "agente" para hablar con un humano.',
-          timestamp: new Date().toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-        },
-      ]);
+      // Si no es un número válido, se interpreta como pregunta académica libre
+      sendToAcademicChatbot(inputValue);
     }
 
     setInputValue('');
   };
 
   const handleKeyPress = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
-      handleSendMessage();
-    }
+    if (event.key === 'Enter') handleSendMessage();
   };
 
   return (
     <div className="flex flex-col h-full">
-      {/* Mensajes */}
+      {/* Chat messages */}
       <div className="flex-1 p-6 overflow-y-auto">
         <div className="space-y-6">
           {messages.map((msg) => (
@@ -272,19 +297,24 @@ export default function ChatInterface() {
 
           <input
             type="text"
-            placeholder="Escribe tu mensaje aquí..."
+            placeholder={
+              blocked
+                ? 'Chat bloqueado: estás en espera de un agente humano...'
+                : 'Escribe tu mensaje aquí...'
+            }
             className="w-full pl-24 pr-14 py-3 border-2 border-gray-200 rounded-full focus:outline-none focus:border-primary transition-colors text-dark"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyPress}
+            disabled={blocked}
           />
 
           <button
             className={cn(
               'absolute right-3 p-2.5 rounded-full transition-colors',
               blocked
-                ? 'bg-blue-200 text-white cursor-not-allowed' // botón deshabilitado
-                : 'bg-primary text-white hover:bg-primary-dark' // botón activo
+                ? 'bg-blue-200 text-white cursor-not-allowed'
+                : 'bg-primary text-white hover:bg-primary-dark'
             )}
             onClick={handleSendMessage}
             disabled={blocked}

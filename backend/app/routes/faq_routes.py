@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.routes.auth import get_current_user
-from app.services.chatbot_services import (
+from app.services.faq_services import (
     get_answer_by_question_id,
     get_questions_from_db,
 )

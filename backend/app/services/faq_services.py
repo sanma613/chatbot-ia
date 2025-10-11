@@ -1,5 +1,4 @@
 from typing import Any, Dict, List, Optional
-
 from app.core.config import supabase_
 
 
