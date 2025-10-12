@@ -5,6 +5,7 @@ import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import { ThumbsUpIcon, ThumbsDownIcon } from 'lucide-react';
 import { cn } from '@/lib/Utils';
+import { rateMessage as rateMessageAPI } from '@/lib/conversationApi';
 
 // Unified Message type that supports both live chat and history preview
 export interface ChatMessage {
@@ -70,10 +71,22 @@ export default function ChatBase({
     }
 
     // Ensure unique ID: use original id if valid, otherwise generate one
-    const uniqueId =
-      msg.id != null && !isNaN(Number(msg.id))
-        ? String(msg.id)
-        : `msg-${index}-${Date.now()}`;
+    // Use crypto.randomUUID() for truly unique IDs, with fallback for older browsers
+    let uniqueId: string;
+    const hasValidId =
+      msg.id != null &&
+      msg.id !== '' &&
+      !isNaN(Number(msg.id)) &&
+      String(msg.id) !== 'NaN';
+
+    if (hasValidId) {
+      uniqueId = String(msg.id);
+    } else if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      uniqueId = crypto.randomUUID();
+    } else {
+      // Fallback: combine index, timestamp, and random number
+      uniqueId = `msg-${index}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    }
 
     return {
       id: uniqueId,
@@ -98,18 +111,10 @@ export default function ChatBase({
       onRateMessage(messageId, finalRating);
     }
 
-    // Send to backend (only in interactive mode)
-    if (!readonly) {
+    // Send to backend (only in interactive mode and only for non-null ratings)
+    if (!readonly && finalRating) {
       try {
-        await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/chatbot/rate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            messageId,
-            rating: finalRating,
-          }),
-        });
+        await rateMessageAPI(String(messageId), finalRating);
       } catch (err) {
         console.warn('Failed to send rating:', err);
       }

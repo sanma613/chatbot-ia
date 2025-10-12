@@ -9,11 +9,12 @@ import { Message as ConversationMessage } from '@/app/types/chat';
 
 // Tipo de mensaje que usa ChatInterface
 type ChatMessage = {
-  id: number;
+  id: number | string;
   sender: 'UniBot' | 'user';
   text: string;
   timestamp: string;
   avatar?: string;
+  rating?: 'up' | 'down' | null;
 };
 
 interface ChatPageProps {
@@ -46,7 +47,7 @@ export default function ChatPage({
   // Convertir mensajes del historial al formato de ChatInterface
   const convertMessages = (messages: ConversationMessage[]): ChatMessage[] => {
     return messages.map((msg) => ({
-      id: typeof msg.id === 'string' ? parseInt(msg.id) : msg.id,
+      id: msg.id, // Keep as string (UUID) - ChatInterface handles both types
       sender: msg.role === 'user' ? 'user' : 'UniBot',
       text: msg.content,
       timestamp:
@@ -57,6 +58,7 @@ export default function ChatPage({
               minute: '2-digit',
             }),
       avatar: msg.role === 'assistant' ? '/images/logo_uni.png' : undefined,
+      rating: msg.rating,
     }));
   };
 

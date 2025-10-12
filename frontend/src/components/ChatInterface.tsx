@@ -6,6 +6,10 @@ import removeMarkdown from 'remove-markdown';
 import { useUser } from '@/hooks/useUser';
 import { cn } from '@/lib/Utils';
 import ChatBase from './chat/ChatBase';
+import {
+  sendChatMessage,
+  rateMessage as rateMessageAPI,
+} from '@/lib/conversationApi';
 
 type Question = {
   id: number;
@@ -13,11 +17,12 @@ type Question = {
 };
 
 type Message = {
-  id: number;
+  id: number | string; // Support both number (local) and string (UUID from API)
   sender: 'UniBot' | 'user';
   text: string;
   timestamp: string;
   avatar?: string;
+  rating?: 'up' | 'down' | null;
 };
 
 // Tipos para Web Speech API
@@ -58,14 +63,14 @@ interface ChatInterfaceProps {
 
 export default function ChatInterface({
   initialMessages = [],
-  // conversationId, // TODO: Usar para persistir mensajes nuevos en conversación existente
+  conversationId: propConversationId,
   conversationTitle,
 }: ChatInterfaceProps) {
   const { user, loading } = useUser();
   const [inputValue, setInputValue] = useState('');
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [messageRatings, setMessageRatings] = useState<
-    Record<number, 'up' | 'down' | null>
+    Record<number | string, 'up' | 'down' | null>
   >({});
   const [questions, setQuestions] = useState<Question[]>([]);
   const [blocked, setBlocked] = useState(false);
@@ -73,14 +78,50 @@ export default function ChatInterface({
   const [isSpeechSupported, setIsSpeechSupported] = useState(true);
   const [voiceMode, setVoiceMode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
   const [speakResponses, setSpeakResponses] = useState(false);
+  // Conversation tracking
+  const [conversationId, setConversationId] = useState<string | undefined>(
+    propConversationId
+  );
+  // Store latest assistant message ID for potential future features (e.g., message actions)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [assistantMessageId, setAssistantMessageId] = useState<
+    string | undefined
+  >();
+  // Track if we're creating the first conversation
+  const [isCreatingConversation, setIsCreatingConversation] = useState(false);
+  // Store welcome message for later use when creating conversation
+  const [welcomeMessage, setWelcomeMessage] = useState<string>('');
+  // Track if we're waiting for bot response (cooldown)
+  const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
   // Refs to hold latest values for callbacks (avoid stale closures)
   const speakResponsesRef = useRef<boolean>(speakResponses);
   const voiceModeRef = useRef<boolean>(voiceMode);
   const ttsPlayingRef = useRef<boolean>(false);
   const waitingForResponseRef = useRef<boolean>(false);
   const blockedRef = useRef<boolean>(blocked);
+
+  // Sync messages when initialMessages change (for conversation history)
+  useEffect(() => {
+    if (initialMessages.length > 0) {
+      setMessages(initialMessages);
+    }
+  }, [initialMessages]);
+
+  // Initialize messageRatings from loaded messages
+  useEffect(() => {
+    if (initialMessages.length > 0) {
+      const ratings: Record<number | string, 'up' | 'down' | null> = {};
+      initialMessages.forEach((msg) => {
+        if (msg.rating) {
+          ratings[msg.id] = msg.rating;
+        }
+      });
+      setMessageRatings(ratings);
+    }
+  }, [initialMessages]);
 
   useEffect(() => {
     speakResponsesRef.current = speakResponses;
@@ -93,6 +134,13 @@ export default function ChatInterface({
   useEffect(() => {
     blockedRef.current = blocked;
   }, [blocked]);
+
+  // Autofocus input after cooldown ends
+  useEffect(() => {
+    if (!isWaitingForResponse && !blocked && !voiceMode && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isWaitingForResponse, blocked, voiceMode]);
 
   // TTS helper: uses SpeechSynthesis and restarts recognition when finished
   const speakText = useCallback((text: string) => {
@@ -152,15 +200,19 @@ export default function ChatInterface({
     }
   }, []);
 
-  // 🔹 Enviar pregunta de FAQ (memoized)
+  // 🔹 Enviar pregunta de FAQ (memoized) - WITH CONVERSATION TRACKING
   const sendFaqToBackend = useCallback(
     async (questionId: number) => {
       const url = process.env.NEXT_PUBLIC_BACKEND_URL;
       try {
+        // Use POST endpoint with conversation tracking
         const res = await fetch(`${url}/faq/get_answer/${questionId}`, {
-          method: 'GET',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
+          body: JSON.stringify({
+            conversation_id: conversationId || null,
+          }),
         });
 
         if (res.ok) {
@@ -168,13 +220,25 @@ export default function ChatInterface({
 
           const answerText = data.answer ?? '';
 
+          // Update conversation ID if this is a new conversation
+          if (data.conversation_id && !conversationId) {
+            setConversationId(data.conversation_id);
+            localStorage.setItem('currentConversationId', data.conversation_id);
+          }
+
+          // Store assistant message ID for potential rating
+          if (data.assistant_message_id) {
+            setAssistantMessageId(data.assistant_message_id);
+          }
+
           // chatbot responded: we're no longer waiting
           waitingForResponseRef.current = false;
+          setIsWaitingForResponse(false);
 
           setMessages((prev: Message[]) => [
             ...prev,
             {
-              id: Date.now(),
+              id: data.assistant_message_id || Date.now(),
               sender: 'UniBot',
               avatar: '/images/logo_uni.png',
               text: answerText,
@@ -191,34 +255,104 @@ export default function ChatInterface({
       } catch (error) {
         console.error('Error fetching FAQ answer:', error);
         waitingForResponseRef.current = false;
+        setIsWaitingForResponse(false);
       }
     },
-    [speakText]
+    [speakText, conversationId]
   );
 
-  // 🔹 Enviar pregunta libre al chatbot académico (memoized)
+  // 🔹 Enviar pregunta libre al chatbot académico (memoized) - WITH AUTOMATIC CONVERSATION CREATION
   const sendToAcademicChatbot = useCallback(
     async (question: string) => {
-      const url = process.env.NEXT_PUBLIC_BACKEND_URL;
       try {
-        const res = await fetch(`${url}/chatbot/ask`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ question }),
-        });
+        // DECISION POINT: Does conversation exist?
+        if (!conversationId) {
+          // ===== FIRST MESSAGE - CREATE CONVERSATION WITH WELCOME MESSAGE =====
+          setIsCreatingConversation(true);
 
-        if (res.ok) {
-          const data = await res.json();
+          // Import the new API function
+          const { startConversation } = await import('@/lib/conversationApi');
+
+          // Create conversation with welcome message + user message + AI response
+          const conversationData = await startConversation(
+            welcomeMessage,
+            question
+          );
+
+          setIsCreatingConversation(false);
+
+          // Update conversation ID
+          setConversationId(conversationData.conversation.id);
+
+          // Store in localStorage for persistence
+          localStorage.setItem(
+            'currentConversationId',
+            conversationData.conversation.id
+          );
+
+          // Convert messages to UI format and replace local messages
+          const convertedMessages: Message[] = conversationData.messages.map(
+            (msg) => ({
+              id: msg.id,
+              sender: msg.role === 'user' ? 'user' : 'UniBot',
+              text: msg.content,
+              timestamp:
+                typeof msg.timestamp === 'string'
+                  ? new Date(msg.timestamp).toLocaleTimeString('es-ES', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  : new Date().toLocaleTimeString('es-ES', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    }),
+              avatar:
+                msg.role === 'assistant' ? '/images/logo_uni.png' : undefined,
+            })
+          );
+
+          setMessages(convertedMessages);
+
+          // Speak the AI response (last message)
+          const aiResponse =
+            conversationData.messages[conversationData.messages.length - 1];
+          if (aiResponse && aiResponse.role === 'assistant') {
+            speakText(aiResponse.content);
+          }
+
+          // Store latest assistant message ID
+          if (aiResponse) {
+            setAssistantMessageId(aiResponse.id);
+          }
+
+          // Check if conversation was escalated
+          if (conversationData.conversation.is_escalated) {
+            setBlocked(true);
+            setVoiceMode(false);
+            setSpeakResponses(false);
+          }
+
+          waitingForResponseRef.current = false;
+          setIsWaitingForResponse(false);
+        } else {
+          // ===== SUBSEQUENT MESSAGE - USE EXISTING CONVERSATION =====
+          const data = await sendChatMessage(question, conversationId);
+
           const answerText = data.answer ?? '';
+
+          // Store the assistant message ID for potential rating
+          if (data.assistant_message_id) {
+            setAssistantMessageId(data.assistant_message_id);
+          }
 
           // chatbot responded: we're no longer waiting
           waitingForResponseRef.current = false;
+          setIsWaitingForResponse(false);
 
           setMessages((prev: Message[]) => [
             ...prev,
             {
-              id: Date.now(),
+              id: data.assistant_message_id || Date.now(),
               sender: 'UniBot',
               avatar: '/images/logo_uni.png',
               text: answerText,
@@ -230,36 +364,45 @@ export default function ChatInterface({
           ]);
 
           speakText(answerText);
-        } else {
-          const errorMsg =
-            'Hubo un problema al procesar tu consulta. Intenta nuevamente más tarde.';
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: Date.now(),
-              sender: 'UniBot',
-              avatar: '/images/logo_uni.png',
-              text: errorMsg,
-              timestamp: new Date().toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              }),
-            },
-          ]);
 
-          speakText(errorMsg);
+          // Check if conversation was escalated
+          if (data.escalated) {
+            setBlocked(true);
+            setVoiceMode(false);
+            setSpeakResponses(false);
+          }
         }
       } catch (error) {
         console.error('Error sending message to academic chatbot:', error);
+        setIsCreatingConversation(false);
         waitingForResponseRef.current = false;
+        setIsWaitingForResponse(false);
+
+        const errorMsg =
+          'Hubo un problema al procesar tu consulta. Intenta nuevamente más tarde.';
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now(),
+            sender: 'UniBot',
+            avatar: '/images/logo_uni.png',
+            text: errorMsg,
+            timestamp: new Date().toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+          },
+        ]);
+
+        speakText(errorMsg);
       }
     },
-    [speakText]
+    [speakText, conversationId, welcomeMessage]
   );
   // 🔹 Manejo del envío de mensajes (texto) - usa las funciones memoizadas
   const handleSendMessageWithText = useCallback(
     (text: string) => {
-      if (text.trim() === '' || blocked) return;
+      if (text.trim() === '' || blocked || isWaitingForResponse) return;
 
       const newMessage: Message = {
         id: Date.now(),
@@ -299,8 +442,9 @@ export default function ChatInterface({
 
       const selectedNumber = parseInt(trimmed, 10);
 
-      // mark waiting for response so mic doesn't auto-restart
+      // mark waiting for response so mic doesn't auto-restart and UI shows cooldown
       waitingForResponseRef.current = true;
+      setIsWaitingForResponse(true);
 
       if (
         !isNaN(selectedNumber) &&
@@ -315,7 +459,13 @@ export default function ChatInterface({
 
       setInputValue('');
     },
-    [blocked, questions, sendFaqToBackend, sendToAcademicChatbot]
+    [
+      blocked,
+      isWaitingForResponse,
+      questions,
+      sendFaqToBackend,
+      sendToAcademicChatbot,
+    ]
   );
 
   const scrollToBottom = () => {
@@ -505,6 +655,18 @@ export default function ChatInterface({
   };
 
   // 🔹 Cargar FAQs desde el backend (siempre, para poder responder a números)
+  // 🔹 Load existing conversation from localStorage on mount
+  useEffect(() => {
+    // Only try to load if no conversationId is provided via props
+    if (!propConversationId && initialMessages.length === 0) {
+      const savedConversationId = localStorage.getItem('currentConversationId');
+      if (savedConversationId && savedConversationId !== 'undefined') {
+        setConversationId(savedConversationId);
+        // Note: Messages will be loaded by ChatPage component if needed
+      }
+    }
+  }, [propConversationId, initialMessages.length]);
+
   useEffect(() => {
     const isExistingConversation = initialMessages.length > 0;
 
@@ -536,9 +698,12 @@ export default function ChatInterface({
 
             const greeting = `¡Hola! Soy UniBot 🤖. Estas son algunas preguntas frecuentes que puedo responder:\n\n${enumerated}\n`;
 
+            // Store welcome message for later use when creating conversation
+            setWelcomeMessage(greeting);
+
             setMessages([
               {
-                id: Date.now(),
+                id: 'welcome-local',
                 sender: 'UniBot',
                 avatar: '/images/logo_uni.png',
                 text: greeting,
@@ -559,12 +724,18 @@ export default function ChatInterface({
         );
         // En modo desarrollo/sin backend, mostrar mensaje simple solo en chat nuevo
         if (!isExistingConversation) {
+          const simpleGreeting =
+            '¡Hola! Soy UniBot 🤖. ¿En qué puedo ayudarte hoy?';
+
+          // Store welcome message for later use
+          setWelcomeMessage(simpleGreeting);
+
           setMessages([
             {
-              id: Date.now(),
+              id: 'welcome-local',
               sender: 'UniBot',
               avatar: '/images/logo_uni.png',
-              text: '¡Hola! Soy UniBot 🤖. ¿En qué puedo ayudarte hoy?',
+              text: simpleGreeting,
               timestamp: new Date().toLocaleTimeString([], {
                 hour: '2-digit',
                 minute: '2-digit',
@@ -578,13 +749,29 @@ export default function ChatInterface({
     fetchQuestions();
   }, [speakText, initialMessages.length]);
 
-  // 🔹 Manejo de calificación de mensajes
+  // 🔹 Manejo de calificación de mensajes - WITH API INTEGRATION
   const handleRateMessage = useCallback(
-    (id: number | string, rating: 'up' | 'down' | null) => {
+    async (id: number | string, rating: 'up' | 'down' | null) => {
+      // Update local state immediately for responsive UI
       setMessageRatings((prev) => ({
         ...prev,
         [id]: rating,
       }));
+
+      // If it's a string (UUID from API), send rating to backend
+      if (typeof id === 'string' && rating) {
+        try {
+          await rateMessageAPI(id, rating);
+          console.log('Message rated successfully');
+        } catch (error) {
+          console.error('Failed to rate message:', error);
+          // Optionally revert the rating in case of error
+          setMessageRatings((prev) => ({
+            ...prev,
+            [id]: null,
+          }));
+        }
+      }
     },
     []
   );
@@ -606,17 +793,61 @@ export default function ChatInterface({
     );
   }
 
+  // 🔹 Handle new conversation button
+  const handleNewConversation = () => {
+    // Clear current conversation
+    setConversationId(undefined);
+    localStorage.removeItem('currentConversationId');
+
+    // Will be set when FAQs are loaded
+    setWelcomeMessage('');
+
+    // Clear messages - will be repopulated with welcome message
+    setMessages([]);
+
+    // Reset other states
+    setBlocked(false);
+    setVoiceMode(false);
+    setSpeakResponses(false);
+    setMessageRatings({});
+
+    // Trigger FAQ reload to show welcome message
+    window.location.href = '/chat';
+  };
+
   return (
     <div className="flex flex-col h-full">
-      {/* Header de conversación (solo si existe conversationTitle) */}
-      {conversationTitle && (
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
-          <h1 className="text-xl font-semibold text-dark">
-            {conversationTitle}
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Continuando conversación anterior
-          </p>
+      {/* Header de conversación */}
+      {(conversationTitle || conversationId) && (
+        <div className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+          <div>
+            <h1 className="text-xl font-semibold text-dark">
+              {conversationTitle || 'Conversación en curso'}
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">
+              {conversationTitle
+                ? 'Continuando conversación anterior'
+                : 'Conversación activa'}
+            </p>
+          </div>
+          <button
+            onClick={handleNewConversation}
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-secondary transition-colors text-sm font-medium"
+          >
+            Nueva Conversación
+          </button>
+        </div>
+      )}
+
+      {/* Loading indicator when creating conversation */}
+      {isCreatingConversation && (
+        <div className="bg-blue-50 border-b border-blue-200 px-6 py-3">
+          <div className="flex items-center gap-3">
+            <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-sm text-blue-700">
+              Creando conversación y guardando mensajes...
+            </p>
+          </div>
         </div>
       )}
 
@@ -638,12 +869,19 @@ export default function ChatInterface({
             {/* 🎤 Botón de Micrófono con animación */}
             <button
               onClick={toggleRecording}
-              disabled={blocked}
+              disabled={
+                blocked || isCreatingConversation || isWaitingForResponse
+              }
               className={cn('transition-all duration-200', {
                 'text-red-500 animate-pulse': isRecording || voiceMode,
                 'text-primary hover:text-secondary':
-                  !isRecording && !blocked && !voiceMode,
-                'text-gray-400 cursor-not-allowed': blocked,
+                  !isRecording &&
+                  !blocked &&
+                  !voiceMode &&
+                  !isCreatingConversation &&
+                  !isWaitingForResponse,
+                'text-gray-400 cursor-not-allowed':
+                  blocked || isCreatingConversation || isWaitingForResponse,
               })}
               title={
                 voiceMode
@@ -660,10 +898,14 @@ export default function ChatInterface({
 
             <button
               className={cn('transition-colors', {
-                'text-primary hover:text-secondary': !blocked,
-                'text-gray-400 cursor-not-allowed': blocked,
+                'text-primary hover:text-secondary':
+                  !blocked && !isCreatingConversation && !isWaitingForResponse,
+                'text-gray-400 cursor-not-allowed':
+                  blocked || isCreatingConversation || isWaitingForResponse,
               })}
-              disabled={blocked}
+              disabled={
+                blocked || isCreatingConversation || isWaitingForResponse
+              }
               title="Adjuntar archivo (próximamente)"
             >
               <Paperclip size={22} />
@@ -671,28 +913,47 @@ export default function ChatInterface({
           </div>
 
           <input
+            ref={inputRef}
             type="text"
             placeholder={
-              blocked
-                ? 'Chat bloqueado: estás en espera de un agente humano...'
-                : 'Escribe tu mensaje o usa el micrófono...'
+              isWaitingForResponse
+                ? 'Esperando respuesta...'
+                : isCreatingConversation
+                  ? 'Creando conversación...'
+                  : blocked
+                    ? 'Chat bloqueado: estás en espera de un agente humano...'
+                    : 'Escribe tu mensaje o usa el micrófono...'
             }
             className="w-full pl-24 pr-14 py-3 border-2 border-gray-200 rounded-full focus:outline-none focus:border-primary transition-colors text-dark"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyPress}
-            disabled={blocked || isRecording || voiceMode}
+            disabled={
+              blocked ||
+              isRecording ||
+              voiceMode ||
+              isCreatingConversation ||
+              isWaitingForResponse
+            }
           />
 
           <button
             className={cn(
               'absolute right-3 p-2.5 rounded-full transition-colors',
-              blocked || isRecording
+              blocked ||
+                isRecording ||
+                isCreatingConversation ||
+                isWaitingForResponse
                 ? 'bg-gray-300 text-white cursor-not-allowed'
                 : 'bg-primary text-white hover:bg-secondary'
             )}
             onClick={handleSendMessage}
-            disabled={blocked || isRecording}
+            disabled={
+              blocked ||
+              isRecording ||
+              isCreatingConversation ||
+              isWaitingForResponse
+            }
           >
             <Send size={20} />
           </button>
