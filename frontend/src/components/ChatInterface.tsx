@@ -2,12 +2,10 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Mic, MicOff, Paperclip, Send } from 'lucide-react';
-import Image from 'next/image';
-import ReactMarkdown from 'react-markdown';
-import { ThumbsDownIcon, ThumbsUpIcon } from 'lucide-react';
 import removeMarkdown from 'remove-markdown';
 import { useUser } from '@/hooks/useUser';
 import { cn } from '@/lib/Utils';
+import ChatBase from './chat/ChatBase';
 
 type Question = {
   id: number;
@@ -52,19 +50,20 @@ declare global {
   }
 }
 
-const UserAvatar = ({ fullName }: { fullName?: string }) => {
-  const firstLetter = fullName?.charAt(0)?.toUpperCase() || 'U';
-  return (
-    <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-white font-bold">
-      {firstLetter}
-    </div>
-  );
-};
+interface ChatInterfaceProps {
+  initialMessages?: Message[];
+  conversationId?: string;
+  conversationTitle?: string;
+}
 
-export default function ChatInterface() {
+export default function ChatInterface({
+  initialMessages = [],
+  // conversationId, // TODO: Usar para persistir mensajes nuevos en conversación existente
+  conversationTitle,
+}: ChatInterfaceProps) {
   const { user, loading } = useUser();
   const [inputValue, setInputValue] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [messageRatings, setMessageRatings] = useState<
     Record<number, 'up' | 'down' | null>
   >({});
@@ -505,10 +504,19 @@ export default function ChatInterface() {
     }
   };
 
-  // 🔹 Cargar FAQs desde el backend
+  // 🔹 Cargar FAQs desde el backend (siempre, para poder responder a números)
   useEffect(() => {
+    const isExistingConversation = initialMessages.length > 0;
+
     async function fetchQuestions() {
       const url = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+      // Si no hay URL del backend, salir silenciosamente
+      if (!url) {
+        console.warn('Backend URL no configurada - modo sin conexión');
+        return;
+      }
+
       try {
         const res = await fetch(`${url}/faq/list-questions`, {
           method: 'GET',
@@ -520,45 +528,66 @@ export default function ChatInterface() {
           const data = await res.json();
           setQuestions(data.questions);
 
-          const enumerated = data.questions
-            .map((q: Question, i: number) => `${i + 1}. ${q.question}`)
-            .join('\n');
+          // Solo mostrar el mensaje de bienvenida si es un chat nuevo
+          if (!isExistingConversation) {
+            const enumerated = data.questions
+              .map((q: Question, i: number) => `${i + 1}. ${q.question}`)
+              .join('\n');
 
-          const greeting = `¡Hola! Soy UniBot 🤖. Estas son algunas preguntas frecuentes que puedo responder:\n\n${enumerated}\n`;
+            const greeting = `¡Hola! Soy UniBot 🤖. Estas son algunas preguntas frecuentes que puedo responder:\n\n${enumerated}\n`;
 
+            setMessages([
+              {
+                id: Date.now(),
+                sender: 'UniBot',
+                avatar: '/images/logo_uni.png',
+                text: greeting,
+                timestamp: new Date().toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+              },
+            ]);
+
+            // speak greeting if hands-free mode active
+            speakText(greeting);
+          }
+        }
+      } catch {
+        console.warn(
+          'No se pudieron cargar las FAQs - trabajando en modo sin conexión'
+        );
+        // En modo desarrollo/sin backend, mostrar mensaje simple solo en chat nuevo
+        if (!isExistingConversation) {
           setMessages([
             {
               id: Date.now(),
               sender: 'UniBot',
               avatar: '/images/logo_uni.png',
-              text: greeting,
+              text: '¡Hola! Soy UniBot 🤖. ¿En qué puedo ayudarte hoy?',
               timestamp: new Date().toLocaleTimeString([], {
                 hour: '2-digit',
                 minute: '2-digit',
               }),
             },
           ]);
-
-          // speak greeting if hands-free mode active
-          speakText(greeting);
         }
-      } catch (err) {
-        console.error('Error fetching questions:', err);
       }
     }
 
     fetchQuestions();
-  }, [speakText]);
+  }, [speakText, initialMessages.length]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="w-12 h-12 border-4 border-black border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
-  }
-
-  // 🔹 Función auxiliar para enviar mensajes (usado por el botón y por voz)
+  // 🔹 Manejo de calificación de mensajes
+  const handleRateMessage = useCallback(
+    (id: number | string, rating: 'up' | 'down' | null) => {
+      setMessageRatings((prev) => ({
+        ...prev,
+        [id]: rating,
+      }));
+    },
+    []
+  );
 
   // 🔹 Manejo del envío de mensajes
   const handleSendMessage = () => {
@@ -569,209 +598,37 @@ export default function ChatInterface() {
     if (event.key === 'Enter') handleSendMessage();
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="w-12 h-12 border-4 border-black border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full">
+      {/* Header de conversación (solo si existe conversationTitle) */}
+      {conversationTitle && (
+        <div className="bg-white border-b border-gray-200 px-6 py-4">
+          <h1 className="text-xl font-semibold text-dark">
+            {conversationTitle}
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Continuando conversación anterior
+          </p>
+        </div>
+      )}
+
       {/* Chat messages */}
       <div className="flex-1 p-6 overflow-y-auto">
-        <div className="space-y-4">
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={cn('flex flex-col group', {
-                'items-end': msg.sender === 'user',
-                'items-start': msg.sender !== 'user',
-              })}
-            >
-              <div
-                className={cn('flex items-start gap-4', {
-                  'justify-end': msg.sender === 'user',
-                })}
-              >
-                {msg.sender !== 'user' && msg.avatar && (
-                  <Image
-                    src={msg.avatar}
-                    alt="Bot Avatar"
-                    width={50}
-                    height={40}
-                    className="rounded-full object-cover"
-                  />
-                )}
-
-                <div
-                  className={cn(
-                    'relative max-w-lg p-4 rounded-2xl break-words',
-                    {
-                      'bg-primary text-white rounded-tr-none shadow-md':
-                        msg.sender === 'user',
-                      'bg-gray-100 text-dark rounded-tl-none border border-gray shadow-sm':
-                        msg.sender !== 'user',
-                    }
-                  )}
-                >
-                  {msg.sender === 'UniBot' ? (
-                    <div className="prose prose-sm max-w-none prose-headings:mt-2 prose-headings:mb-2 prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5">
-                      <ReactMarkdown
-                        components={{
-                          h1: ({ children }) => (
-                            <h1 className="text-xl font-bold text-dark mb-2 mt-2">
-                              {children}
-                            </h1>
-                          ),
-                          h2: ({ children }) => (
-                            <h2 className="text-lg font-bold text-dark mb-2 mt-2">
-                              {children}
-                            </h2>
-                          ),
-                          h3: ({ children }) => (
-                            <h3 className="text-base font-bold text-dark mb-2 mt-2">
-                              {children}
-                            </h3>
-                          ),
-                          p: ({ children }) => (
-                            <p className="text-dark mb-2 leading-relaxed whitespace-pre-wrap">
-                              {children}
-                            </p>
-                          ),
-                          strong: ({ children }) => (
-                            <strong className="font-bold text-dark">
-                              {children}
-                            </strong>
-                          ),
-                          em: ({ children }) => (
-                            <em className="italic text-dark">{children}</em>
-                          ),
-                          ul: ({ children }) => (
-                            <ul className="list-disc list-inside space-y-1 my-2">
-                              {children}
-                            </ul>
-                          ),
-                          ol: ({ children }) => (
-                            <ol className="list-decimal list-inside space-y-1 my-2">
-                              {children}
-                            </ol>
-                          ),
-                          li: ({ children }) => (
-                            <li className="text-dark">{children}</li>
-                          ),
-                          blockquote: ({ children }) => (
-                            <blockquote className="border-l-4 border-primary pl-4 py-2 my-2 bg-blue-50 rounded">
-                              {children}
-                            </blockquote>
-                          ),
-                          code: ({ children }) => (
-                            <code className="bg-gray-200 px-2 py-1 rounded text-sm font-mono text-primary">
-                              {children}
-                            </code>
-                          ),
-                          pre: ({ children }) => (
-                            <pre className="bg-gray-800 text-gray-100 p-3 rounded-lg overflow-x-auto my-2">
-                              {children}
-                            </pre>
-                          ),
-                        }}
-                      >
-                        {msg.text}
-                      </ReactMarkdown>
-                    </div>
-                  ) : (
-                    <p className="whitespace-pre-wrap">{msg.text}</p>
-                  )}
-                  <span
-                    className={cn('text-xs mt-2 block', {
-                      'text-blue-200': msg.sender === 'user',
-                      'text-gray-500': msg.sender !== 'user',
-                    })}
-                  >
-                    {msg.timestamp}
-                  </span>
-                </div>
-
-                {msg.sender === 'user' && (
-                  <UserAvatar fullName={user?.full_name} />
-                )}
-              </div>
-
-              {/* Rating buttons - Only for bot messages */}
-              {msg.sender === 'UniBot' && (
-                <div className="flex items-center gap-2 mt-2 mb-2 ml-16">
-                  <button
-                    onClick={async () => {
-                      const current = messageRatings[msg.id] || null;
-                      const newVal: 'up' | null =
-                        current === 'up' ? null : 'up';
-                      setMessageRatings((prev) => ({
-                        ...prev,
-                        [msg.id]: newVal,
-                      }));
-                      try {
-                        await fetch(
-                          `${process.env.NEXT_PUBLIC_BACKEND_URL}/chatbot/rate`,
-                          {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            credentials: 'include',
-                            body: JSON.stringify({
-                              messageId: msg.id,
-                              sender: msg.sender,
-                              rating: newVal,
-                            }),
-                          }
-                        );
-                      } catch (err) {
-                        console.warn('Failed to send rating:', err);
-                      }
-                    }}
-                    className={cn('transition-all', {
-                      'text-black': messageRatings[msg.id] !== 'up',
-                      'text-blue-500': messageRatings[msg.id] === 'up',
-                      'hover:text-blue-500': messageRatings[msg.id] !== 'up',
-                    })}
-                    title="Me gusta"
-                  >
-                    <ThumbsUpIcon size={18} strokeWidth={2} />
-                  </button>
-                  <button
-                    onClick={async () => {
-                      const current = messageRatings[msg.id] || null;
-                      const newVal: 'down' | null =
-                        current === 'down' ? null : 'down';
-                      setMessageRatings((prev) => ({
-                        ...prev,
-                        [msg.id]: newVal,
-                      }));
-                      try {
-                        await fetch(
-                          `${process.env.NEXT_PUBLIC_BACKEND_URL}/chatbot/rate`,
-                          {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            credentials: 'include',
-                            body: JSON.stringify({
-                              messageId: msg.id,
-                              sender: msg.sender,
-                              rating: newVal,
-                            }),
-                          }
-                        );
-                      } catch (err) {
-                        console.warn('Failed to send rating:', err);
-                      }
-                    }}
-                    className={cn('transition-all', {
-                      'text-black': messageRatings[msg.id] !== 'down',
-                      'text-red-500': messageRatings[msg.id] === 'down',
-                      'hover:text-red-500': messageRatings[msg.id] !== 'down',
-                    })}
-                    title="No me gusta"
-                  >
-                    <ThumbsDownIcon size={18} strokeWidth={2} />
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-          <div ref={messagesEndRef}></div>
-        </div>
+        <ChatBase
+          messages={messages}
+          messageRatings={messageRatings}
+          onRateMessage={handleRateMessage}
+          userFullName={user?.full_name}
+          readonly={false}
+        />
       </div>
 
       {/* Input */}
