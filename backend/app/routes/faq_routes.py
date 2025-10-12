@@ -42,21 +42,6 @@ class FAQRequest(BaseModel):
     conversation_id: Optional[str] = None
 
 
-# Legacy endpoint (backward compatibility) - without conversation tracking
-@router.get("/get_answer/{question_id}")
-def get_answer_legacy(
-    question_id: int, user: Any = Depends(get_current_user)
-) -> Dict[str, Any]:
-    """
-    LEGACY: Endpoint para obtener respuesta FAQ sin tracking de conversación.
-    Mantiene compatibilidad con código existente.
-    """
-    answer = get_answer_by_question_id(question_id)
-    if answer is None:
-        raise HTTPException(status_code=404, detail="Pregunta no encontrada")
-    return {"answer": answer}
-
-
 # New endpoint with conversation tracking
 @router.post("/get_answer/{question_id}")
 def get_answer(

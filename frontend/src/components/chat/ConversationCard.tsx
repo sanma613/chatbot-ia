@@ -210,7 +210,7 @@ export default function ConversationCard({
             </div>
             <div className="flex items-center gap-1">
               <MessageSquare className="w-4 h-4" />
-              {conversation.messageCount} mensajes
+              {(conversation.messageCount || 0) + 1} mensajes
             </div>
           </div>
         </div>

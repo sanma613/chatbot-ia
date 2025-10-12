@@ -73,6 +73,7 @@ export default function ChatInterface({
     Record<number | string, 'up' | 'down' | null>
   >({});
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [faqsLoaded, setFaqsLoaded] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeechSupported, setIsSpeechSupported] = useState(true);
@@ -92,8 +93,6 @@ export default function ChatInterface({
   >();
   // Track if we're creating the first conversation
   const [isCreatingConversation, setIsCreatingConversation] = useState(false);
-  // Store welcome message for later use when creating conversation
-  const [welcomeMessage, setWelcomeMessage] = useState<string>('');
   // Track if we're waiting for bot response (cooldown)
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
   // Refs to hold latest values for callbacks (avoid stale closures)
@@ -103,12 +102,52 @@ export default function ChatInterface({
   const waitingForResponseRef = useRef<boolean>(false);
   const blockedRef = useRef<boolean>(blocked);
 
+  // Helper function to create welcome message with FAQs
+  const createWelcomeMessage = useCallback(
+    (questionsArray: Question[]): Message => {
+      if (questionsArray.length > 0) {
+        const enumerated = questionsArray
+          .map((q: Question, i: number) => `${i + 1}. ${q.question}`)
+          .join('\n');
+
+        const greetingWithFAQs = `¡Hola! Soy UniBot 🤖. Estas son algunas preguntas frecuentes que puedo responder:\n\n${enumerated}\n\nTambién puedes hacerme cualquier pregunta sobre la universidad o escribir 'Agente' para hablar con un agente de soporte.`;
+
+        return {
+          id: 'welcome-local',
+          sender: 'UniBot',
+          avatar: '/images/logo_uni.png',
+          text: greetingWithFAQs,
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        };
+      } else {
+        // Fallback simple greeting
+        return {
+          id: 'welcome-local',
+          sender: 'UniBot',
+          avatar: '/images/logo_uni.png',
+          text: '¡Hola! Soy UniBot 🤖. ¿En qué puedo ayudarte hoy?',
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        };
+      }
+    },
+    []
+  );
+
   // Sync messages when initialMessages change (for conversation history)
+  // Always prepend welcome message - wait for FAQs to load first
   useEffect(() => {
-    if (initialMessages.length > 0) {
-      setMessages(initialMessages);
+    if (initialMessages.length > 0 && faqsLoaded) {
+      // Prepend welcome message to loaded conversation
+      const welcomeMsg = createWelcomeMessage(questions);
+      setMessages([welcomeMsg, ...initialMessages]);
     }
-  }, [initialMessages]);
+  }, [initialMessages, questions, createWelcomeMessage, faqsLoaded]);
 
   // Initialize messageRatings from loaded messages
   useEffect(() => {
@@ -205,6 +244,13 @@ export default function ChatInterface({
     async (questionId: number) => {
       const url = process.env.NEXT_PUBLIC_BACKEND_URL;
       try {
+        // DECISION POINT: Does conversation exist?
+        const isFirstMessage = !conversationId;
+
+        if (isFirstMessage) {
+          setIsCreatingConversation(true);
+        }
+
         // Use POST endpoint with conversation tracking
         const res = await fetch(`${url}/faq/get_answer/${questionId}`, {
           method: 'POST',
@@ -224,6 +270,75 @@ export default function ChatInterface({
           if (data.conversation_id && !conversationId) {
             setConversationId(data.conversation_id);
             localStorage.setItem('currentConversationId', data.conversation_id);
+
+            // If it was first message, fetch full conversation to get all messages
+            if (isFirstMessage) {
+              const { getConversationById } = await import(
+                '@/lib/conversationApi'
+              );
+              const conversationData = await getConversationById(
+                data.conversation_id
+              );
+
+              // Convert messages to UI format
+              const convertedMessages: Message[] =
+                conversationData.messages.map((msg) => ({
+                  id: msg.id,
+                  sender: msg.role === 'user' ? 'user' : 'UniBot',
+                  text: msg.content,
+                  timestamp:
+                    typeof msg.timestamp === 'string'
+                      ? new Date(msg.timestamp).toLocaleTimeString('es-ES', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : new Date().toLocaleTimeString('es-ES', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        }),
+                  avatar:
+                    msg.role === 'assistant'
+                      ? '/images/logo_uni.png'
+                      : undefined,
+                  rating: msg.rating,
+                }));
+
+              // Prepend welcome message and set messages
+              const welcomeMsg = createWelcomeMessage(questions);
+              setMessages([welcomeMsg, ...convertedMessages]);
+
+              setIsCreatingConversation(false);
+            } else {
+              // Existing conversation - just append the response
+              setMessages((prev: Message[]) => [
+                ...prev,
+                {
+                  id: data.assistant_message_id || Date.now(),
+                  sender: 'UniBot',
+                  avatar: '/images/logo_uni.png',
+                  text: answerText,
+                  timestamp: new Date().toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }),
+                },
+              ]);
+            }
+          } else {
+            // Existing conversation - just append the response
+            setMessages((prev: Message[]) => [
+              ...prev,
+              {
+                id: data.assistant_message_id || Date.now(),
+                sender: 'UniBot',
+                avatar: '/images/logo_uni.png',
+                text: answerText,
+                timestamp: new Date().toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+              },
+            ]);
           }
 
           // Store assistant message ID for potential rating
@@ -235,30 +350,17 @@ export default function ChatInterface({
           waitingForResponseRef.current = false;
           setIsWaitingForResponse(false);
 
-          setMessages((prev: Message[]) => [
-            ...prev,
-            {
-              id: data.assistant_message_id || Date.now(),
-              sender: 'UniBot',
-              avatar: '/images/logo_uni.png',
-              text: answerText,
-              timestamp: new Date().toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              }),
-            },
-          ]);
-
           // speak and auto-restart mic
           speakText(answerText);
         }
       } catch (error) {
         console.error('Error fetching FAQ answer:', error);
+        setIsCreatingConversation(false);
         waitingForResponseRef.current = false;
         setIsWaitingForResponse(false);
       }
     },
-    [speakText, conversationId]
+    [speakText, conversationId, createWelcomeMessage, questions]
   );
 
   // 🔹 Enviar pregunta libre al chatbot académico (memoized) - WITH AUTOMATIC CONVERSATION CREATION
@@ -267,17 +369,15 @@ export default function ChatInterface({
       try {
         // DECISION POINT: Does conversation exist?
         if (!conversationId) {
-          // ===== FIRST MESSAGE - CREATE CONVERSATION WITH WELCOME MESSAGE =====
+          // ===== FIRST MESSAGE - CREATE CONVERSATION (WITHOUT WELCOME MESSAGE) =====
           setIsCreatingConversation(true);
 
           // Import the new API function
           const { startConversation } = await import('@/lib/conversationApi');
 
-          // Create conversation with welcome message + user message + AI response
-          const conversationData = await startConversation(
-            welcomeMessage,
-            question
-          );
+          // Create conversation with user message + AI response
+          // Welcome message is NOT stored - added dynamically in UI
+          const conversationData = await startConversation(question);
 
           setIsCreatingConversation(false);
 
@@ -290,7 +390,7 @@ export default function ChatInterface({
             conversationData.conversation.id
           );
 
-          // Convert messages to UI format and replace local messages
+          // Convert messages to UI format
           const convertedMessages: Message[] = conversationData.messages.map(
             (msg) => ({
               id: msg.id,
@@ -311,7 +411,9 @@ export default function ChatInterface({
             })
           );
 
-          setMessages(convertedMessages);
+          // Prepend welcome message and set messages
+          const welcomeMsg = createWelcomeMessage(questions);
+          setMessages([welcomeMsg, ...convertedMessages]);
 
           // Speak the AI response (last message)
           const aiResponse =
@@ -372,14 +474,29 @@ export default function ChatInterface({
             setSpeakResponses(false);
           }
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Error sending message to academic chatbot:', error);
         setIsCreatingConversation(false);
         waitingForResponseRef.current = false;
         setIsWaitingForResponse(false);
 
-        const errorMsg =
-          'Hubo un problema al procesar tu consulta. Intenta nuevamente más tarde.';
+        // If conversation not found (404), clear the invalid conversation ID
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        const is404 =
+          errorMessage.includes('404') || errorMessage.includes('not found');
+
+        if (is404) {
+          console.warn(
+            'Conversation not found. Clearing stored conversation ID.'
+          );
+          setConversationId(undefined);
+          localStorage.removeItem('currentConversationId');
+        }
+
+        const errorMsg = is404
+          ? 'La conversación no existe. Por favor, inicia una nueva conversación.'
+          : 'Hubo un problema al procesar tu consulta. Intenta nuevamente más tarde.';
         setMessages((prev) => [
           ...prev,
           {
@@ -397,7 +514,7 @@ export default function ChatInterface({
         speakText(errorMsg);
       }
     },
-    [speakText, conversationId, welcomeMessage]
+    [speakText, conversationId, createWelcomeMessage, questions]
   );
   // 🔹 Manejo del envío de mensajes (texto) - usa las funciones memoizadas
   const handleSendMessageWithText = useCallback(
@@ -454,6 +571,7 @@ export default function ChatInterface({
         const selectedQuestion = questions[selectedNumber - 1];
         sendFaqToBackend(selectedQuestion.id);
       } else {
+        // No need to pass welcome message - it's added dynamically
         sendToAcademicChatbot(text);
       }
 
@@ -655,17 +773,8 @@ export default function ChatInterface({
   };
 
   // 🔹 Cargar FAQs desde el backend (siempre, para poder responder a números)
-  // 🔹 Load existing conversation from localStorage on mount
-  useEffect(() => {
-    // Only try to load if no conversationId is provided via props
-    if (!propConversationId && initialMessages.length === 0) {
-      const savedConversationId = localStorage.getItem('currentConversationId');
-      if (savedConversationId && savedConversationId !== 'undefined') {
-        setConversationId(savedConversationId);
-        // Note: Messages will be loaded by ChatPage component if needed
-      }
-    }
-  }, [propConversationId, initialMessages.length]);
+  // Note: Removed localStorage conversation loading - conversations should be accessed via /chat/{id} route
+  // When user goes to /chat, it should always start a fresh conversation
 
   useEffect(() => {
     const isExistingConversation = initialMessages.length > 0;
@@ -689,65 +798,33 @@ export default function ChatInterface({
         if (res.ok) {
           const data = await res.json();
           setQuestions(data.questions);
+          setFaqsLoaded(true); // Mark FAQs as loaded
 
           // Solo mostrar el mensaje de bienvenida si es un chat nuevo
           if (!isExistingConversation) {
-            const enumerated = data.questions
-              .map((q: Question, i: number) => `${i + 1}. ${q.question}`)
-              .join('\n');
-
-            const greeting = `¡Hola! Soy UniBot 🤖. Estas son algunas preguntas frecuentes que puedo responder:\n\n${enumerated}\n`;
-
-            // Store welcome message for later use when creating conversation
-            setWelcomeMessage(greeting);
-
-            setMessages([
-              {
-                id: 'welcome-local',
-                sender: 'UniBot',
-                avatar: '/images/logo_uni.png',
-                text: greeting,
-                timestamp: new Date().toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                }),
-              },
-            ]);
+            // Show welcome message with FAQs
+            const welcomeMsg = createWelcomeMessage(data.questions);
+            setMessages([welcomeMsg]);
 
             // speak greeting if hands-free mode active
-            speakText(greeting);
+            speakText(welcomeMsg.text);
           }
         }
       } catch {
         console.warn(
           'No se pudieron cargar las FAQs - trabajando en modo sin conexión'
         );
+        setFaqsLoaded(true); // Mark as loaded even on error
         // En modo desarrollo/sin backend, mostrar mensaje simple solo en chat nuevo
         if (!isExistingConversation) {
-          const simpleGreeting =
-            '¡Hola! Soy UniBot 🤖. ¿En qué puedo ayudarte hoy?';
-
-          // Store welcome message for later use
-          setWelcomeMessage(simpleGreeting);
-
-          setMessages([
-            {
-              id: 'welcome-local',
-              sender: 'UniBot',
-              avatar: '/images/logo_uni.png',
-              text: simpleGreeting,
-              timestamp: new Date().toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              }),
-            },
-          ]);
+          const welcomeMsg = createWelcomeMessage([]);
+          setMessages([welcomeMsg]);
         }
       }
     }
 
     fetchQuestions();
-  }, [speakText, initialMessages.length]);
+  }, [speakText, initialMessages.length, createWelcomeMessage]);
 
   // 🔹 Manejo de calificación de mensajes - WITH API INTEGRATION
   const handleRateMessage = useCallback(
@@ -799,11 +876,9 @@ export default function ChatInterface({
     setConversationId(undefined);
     localStorage.removeItem('currentConversationId');
 
-    // Will be set when FAQs are loaded
-    setWelcomeMessage('');
-
-    // Clear messages - will be repopulated with welcome message
-    setMessages([]);
+    // Show welcome message
+    const welcomeMsg = createWelcomeMessage(questions);
+    setMessages([welcomeMsg]);
 
     // Reset other states
     setBlocked(false);
@@ -853,13 +928,21 @@ export default function ChatInterface({
 
       {/* Chat messages */}
       <div className="flex-1 p-6 overflow-y-auto">
-        <ChatBase
-          messages={messages}
-          messageRatings={messageRatings}
-          onRateMessage={handleRateMessage}
-          userFullName={user?.full_name}
-          readonly={false}
-        />
+        {initialMessages.length > 0 && !faqsLoaded ? (
+          // Show loader while FAQs are loading for existing conversations
+          <div className="flex flex-col items-center justify-center h-full gap-4">
+            <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-dark text-sm">Cargando conversación...</p>
+          </div>
+        ) : (
+          <ChatBase
+            messages={messages}
+            messageRatings={messageRatings}
+            onRateMessage={handleRateMessage}
+            userFullName={user?.full_name}
+            readonly={false}
+          />
+        )}
       </div>
 
       {/* Input */}

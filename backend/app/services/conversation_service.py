@@ -52,14 +52,16 @@ def get_conversation(conversation_id: str, user_id: str) -> Optional[Dict[str, A
             .select("*")
             .eq("id", conversation_id)
             .eq("user_id", user_id)
-            .single()
+            .maybe_single()  # Use maybe_single() to avoid exception when no rows
             .execute()
         )
 
         return response.data if response.data else None
 
     except Exception as e:
-        print(f"Error getting conversation: {e}")
+        print(
+            f"Error getting conversation (id={conversation_id}, user_id={user_id}): {e}"
+        )
         return None
 
 

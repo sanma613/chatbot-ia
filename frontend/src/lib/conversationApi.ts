@@ -130,7 +130,10 @@ export async function sendChatMessage(
   });
 
   if (!response.ok) {
-    throw new Error('Failed to send message');
+    const errorData = await response.json().catch(() => ({}));
+    const errorMessage =
+      errorData.detail || `Failed to send message (${response.status})`;
+    throw new Error(errorMessage);
   }
 
   return response.json();
@@ -221,31 +224,43 @@ export async function addMessageToConversation(
 }
 
 /**
- * Start a new conversation with welcome message and initial user message
- * This creates the conversation and stores all 3 messages: welcome, user, AI response
+ * Start a new conversation with initial user message
+ * This creates the conversation and stores 2 messages: user, AI response
+ * The welcome message is NOT stored - it's added dynamically in the UI
  */
 export async function startConversation(
-  welcomeMessage: string,
   initialMessage: string
 ): Promise<ConversationWithMessages> {
-  const response = await fetch(`${API_URL}/chatbot/start`, {
+  const response = await fetch(`${API_URL}/chatbot/ask`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     credentials: 'include',
     body: JSON.stringify({
-      welcome_message: welcomeMessage,
-      initial_message: initialMessage,
+      question: initialMessage,
+      conversation_id: null, // Create new conversation
     }),
   });
 
   if (!response.ok) {
-    throw new Error('Failed to start conversation');
+    const errorData = await response.json().catch(() => ({}));
+    const errorMessage =
+      errorData.detail || `Failed to start conversation (${response.status})`;
+    throw new Error(errorMessage);
   }
 
   const result = await response.json();
-  return result.data;
+
+  // Transform response to match ConversationWithMessages interface
+  // The backend returns conversation info + messages in a different format
+  // We need to fetch the conversation details to get full data
+  const conversationId = result.conversation_id;
+
+  // Fetch full conversation data
+  const conversationData = await getConversationById(conversationId);
+
+  return conversationData;
 }
 
 /**
