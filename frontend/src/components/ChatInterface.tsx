@@ -5,6 +5,7 @@ import { Mic, MicOff, Paperclip, Send } from 'lucide-react';
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import { ThumbsDownIcon, ThumbsUpIcon } from 'lucide-react';
+import removeMarkdown from 'remove-markdown';
 import { useUser } from '@/hooks/useUser';
 import { cn } from '@/lib/Utils';
 
@@ -118,7 +119,9 @@ export default function ChatInterface() {
       // mark that we're about to play TTS so recognition.onend won't restart the mic
       ttsPlayingRef.current = true;
 
-      const utter = new SpeechSynthesisUtterance(text);
+      const cleanText = removeMarkdown(text);
+
+      const utter = new SpeechSynthesisUtterance(cleanText);
       utter.lang = 'es-ES';
       // choose spanish voice if available
       const voices = synth.getVoices();
@@ -688,84 +691,83 @@ export default function ChatInterface() {
                 )}
               </div>
 
-              {/* Rating buttons - Outside message bubble, always visible */}
-              <div
-                className={cn('flex items-center gap-2 mt-2 mb-2 ml-16', {
-                  'ml-0 mr-14': msg.sender === 'user',
-                })}
-              >
-                <button
-                  onClick={async () => {
-                    const current = messageRatings[msg.id] || null;
-                    const newVal: 'up' | null = current === 'up' ? null : 'up';
-                    setMessageRatings((prev) => ({
-                      ...prev,
-                      [msg.id]: newVal,
-                    }));
-                    try {
-                      await fetch(
-                        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chatbot/rate`,
-                        {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          credentials: 'include',
-                          body: JSON.stringify({
-                            messageId: msg.id,
-                            sender: msg.sender,
-                            rating: newVal,
-                          }),
-                        }
-                      );
-                    } catch (err) {
-                      console.warn('Failed to send rating:', err);
-                    }
-                  }}
-                  className={cn('transition-all', {
-                    'text-black': messageRatings[msg.id] !== 'up',
-                    'text-blue-500': messageRatings[msg.id] === 'up',
-                    'hover:text-blue-500': messageRatings[msg.id] !== 'up',
-                  })}
-                  title="Me gusta"
-                >
-                  <ThumbsUpIcon size={18} strokeWidth={2} />
-                </button>
-                <button
-                  onClick={async () => {
-                    const current = messageRatings[msg.id] || null;
-                    const newVal: 'down' | null =
-                      current === 'down' ? null : 'down';
-                    setMessageRatings((prev) => ({
-                      ...prev,
-                      [msg.id]: newVal,
-                    }));
-                    try {
-                      await fetch(
-                        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chatbot/rate`,
-                        {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          credentials: 'include',
-                          body: JSON.stringify({
-                            messageId: msg.id,
-                            sender: msg.sender,
-                            rating: newVal,
-                          }),
-                        }
-                      );
-                    } catch (err) {
-                      console.warn('Failed to send rating:', err);
-                    }
-                  }}
-                  className={cn('transition-all', {
-                    'text-black': messageRatings[msg.id] !== 'down',
-                    'text-red-500': messageRatings[msg.id] === 'down',
-                    'hover:text-red-500': messageRatings[msg.id] !== 'down',
-                  })}
-                  title="No me gusta"
-                >
-                  <ThumbsDownIcon size={18} strokeWidth={2} />
-                </button>
-              </div>
+              {/* Rating buttons - Only for bot messages */}
+              {msg.sender === 'UniBot' && (
+                <div className="flex items-center gap-2 mt-2 mb-2 ml-16">
+                  <button
+                    onClick={async () => {
+                      const current = messageRatings[msg.id] || null;
+                      const newVal: 'up' | null =
+                        current === 'up' ? null : 'up';
+                      setMessageRatings((prev) => ({
+                        ...prev,
+                        [msg.id]: newVal,
+                      }));
+                      try {
+                        await fetch(
+                          `${process.env.NEXT_PUBLIC_BACKEND_URL}/chatbot/rate`,
+                          {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({
+                              messageId: msg.id,
+                              sender: msg.sender,
+                              rating: newVal,
+                            }),
+                          }
+                        );
+                      } catch (err) {
+                        console.warn('Failed to send rating:', err);
+                      }
+                    }}
+                    className={cn('transition-all', {
+                      'text-black': messageRatings[msg.id] !== 'up',
+                      'text-blue-500': messageRatings[msg.id] === 'up',
+                      'hover:text-blue-500': messageRatings[msg.id] !== 'up',
+                    })}
+                    title="Me gusta"
+                  >
+                    <ThumbsUpIcon size={18} strokeWidth={2} />
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const current = messageRatings[msg.id] || null;
+                      const newVal: 'down' | null =
+                        current === 'down' ? null : 'down';
+                      setMessageRatings((prev) => ({
+                        ...prev,
+                        [msg.id]: newVal,
+                      }));
+                      try {
+                        await fetch(
+                          `${process.env.NEXT_PUBLIC_BACKEND_URL}/chatbot/rate`,
+                          {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({
+                              messageId: msg.id,
+                              sender: msg.sender,
+                              rating: newVal,
+                            }),
+                          }
+                        );
+                      } catch (err) {
+                        console.warn('Failed to send rating:', err);
+                      }
+                    }}
+                    className={cn('transition-all', {
+                      'text-black': messageRatings[msg.id] !== 'down',
+                      'text-red-500': messageRatings[msg.id] === 'down',
+                      'hover:text-red-500': messageRatings[msg.id] !== 'down',
+                    })}
+                    title="No me gusta"
+                  >
+                    <ThumbsDownIcon size={18} strokeWidth={2} />
+                  </button>
+                </div>
+              )}
             </div>
           ))}
           <div ref={messagesEndRef}></div>
