@@ -198,6 +198,7 @@ export default function NotificationsPage() {
     return notifications.filter((notification) => {
       if (filter === 'all') return true;
       if (filter === 'unread') return !notification.isRead;
+      if (filter === 'read') return notification.isRead;
       if (filter === 'overdue') return notification.type === 'overdue';
       if (filter === 'upcoming')
         return (

@@ -12,6 +12,8 @@ export default function EmptyNotifications({
     switch (filter) {
       case 'unread':
         return 'No hay notificaciones sin leer';
+      case 'read':
+        return 'No hay notificaciones leídas';
       case 'overdue':
         return 'No hay actividades vencidas';
       case 'upcoming':

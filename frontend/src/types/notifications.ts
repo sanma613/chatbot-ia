@@ -29,6 +29,7 @@ export interface ActivityStatus {
 export type NotificationFilter =
   | 'all'
   | 'unread'
+  | 'read'
   | 'overdue'
   | 'upcoming'
   | 'completed'
