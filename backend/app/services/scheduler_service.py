@@ -25,19 +25,19 @@ class ReminderScheduler:
 
     def start(self):
         """Start the scheduler"""
-        # Schedule hourly check to send reminders exactly 24 hours before activities
-        # This ensures reminders are sent regardless of activity time
+        # Schedule every minute check to send reminders exactly 24 hours before activities
+        # This ensures reminders are sent immediately when activities are created
         self.scheduler.add_job(
             self.check_and_send_reminders,
-            CronTrigger(minute=0),  # Every hour at minute 0
-            id="hourly_reminder_check",
-            name="Check and send activity reminders (hourly)",
+            CronTrigger(second=0),  # Every minute at second 0
+            id="minute_reminder_check",
+            name="Check and send activity reminders (every minute)",
             replace_existing=True,
         )
 
         self.scheduler.start()
         logger.info(
-            "Reminder scheduler started - will run hourly to send reminders 24h before activities"
+            "Reminder scheduler started - will run every minute to send reminders 24h before activities"
         )
 
     def stop(self):
@@ -48,21 +48,23 @@ class ReminderScheduler:
 
     def check_and_send_reminders(self):
         """
-        Check for activities in the next 24-25 hours and send reminder emails
-        Runs hourly to ensure reminders are sent approximately 24 hours before each activity
+        Check for activities in the next 24 hours (±1 minute) and send reminder emails
+        Runs every minute to ensure reminders are sent immediately when activities are created
 
         NOTE: Activities are stored as local time (date + time strings without timezone)
         so we compare with local server time for consistency
         """
         try:
-            logger.info("Starting hourly reminder check...")
+            logger.info("Starting reminder check...")
 
-            # Calculate time window: between 24 and 25 hours from now
-            # This 1-hour window ensures each activity gets exactly one reminder
+            # Calculate time window: between 24 hours and 24 hours + 1 minute from now
+            # This 1-minute window ensures each activity gets exactly one reminder
             # Use local time to match how activities are stored
             now = datetime.now()
+            # Round down to the current minute (remove seconds and microseconds)
+            now = now.replace(second=0, microsecond=0)
             start_time = now + timedelta(hours=24)
-            end_time = now + timedelta(hours=25)
+            end_time = now + timedelta(hours=24, minutes=1)
 
             start_date = start_time.strftime("%Y-%m-%d")
             end_date = end_time.strftime("%Y-%m-%d")
@@ -100,7 +102,7 @@ class ReminderScheduler:
         self, start_date: str, end_date: str, start_time: datetime, end_time: datetime
     ) -> List[Dict[str, Any]]:
         """
-        Get all activities in a specific time window (24-25 hours from now)
+        Get all activities in a specific time window (24 hours ±1 minute from now)
         Only returns activities that haven't had their reminder email sent yet
 
         Args:
@@ -236,7 +238,7 @@ class ReminderScheduler:
 
     def _get_user_email(self, user_id: str) -> Dict[str, Any]:
         """
-        Get user email from Supabase auth
+        Get user email and name using RPC call to get auth user data
 
         Args:
             user_id: User UUID
@@ -245,41 +247,46 @@ class ReminderScheduler:
             Dict with email and name
         """
         try:
-            # Get user from auth.users using admin API
-            response = self.supabase.auth.admin.get_user_by_id(user_id)
+            # Try to call a custom RPC function that returns user email
+            # If the function doesn't exist, it will fall back to profiles
+            try:
+                # Call RPC function to get user email from auth.users
+                # You need to create this function in Supabase SQL Editor:
+                # CREATE OR REPLACE FUNCTION get_user_email(user_uuid UUID)
+                # RETURNS TABLE (email TEXT, full_name TEXT) AS $$
+                # BEGIN
+                #   RETURN QUERY
+                #   SELECT au.email::TEXT, p.full_name
+                #   FROM auth.users au
+                #   LEFT JOIN profiles p ON p.id = au.id
+                #   WHERE au.id = user_uuid;
+                # END;
+                # $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-            if response and response.user:
-                user = response.user
-                user_name = user.user_metadata.get("name") or user.user_metadata.get(
-                    "full_name"
+                result = self.supabase.rpc(
+                    "get_user_email", {"user_uuid": user_id}
+                ).execute()
+
+                if result.data and len(result.data) > 0:
+                    user_data = result.data[0]
+                    email = user_data.get("email")
+                    full_name = user_data.get("full_name")
+
+                    if email:
+                        user_name = full_name if full_name else email.split("@")[0]
+                        logger.info(f"Found user: {email} (name: {user_name})")
+                        return {
+                            "email": email,
+                            "name": user_name,
+                        }
+            except Exception as rpc_error:
+                logger.warning(f"RPC function not available or error: {str(rpc_error)}")
+                logger.info(
+                    "Please create the get_user_email RPC function in Supabase SQL Editor"
                 )
+                return None
 
-                # Si no hay nombre en user_metadata, buscar en la tabla profiles
-                if not user_name:
-                    try:
-                        profile_response = (
-                            self.supabase.table("profiles")
-                            .select("full_name")
-                            .eq("id", user_id)
-                            .single()
-                            .execute()
-                        )
-                        if profile_response.data:
-                            user_name = profile_response.data.get("full_name")
-                    except Exception as profile_error:
-                        logger.warning(
-                            f"Could not fetch profile for user {user_id}: {str(profile_error)}"
-                        )
-
-                # Último fallback: usar parte del email
-                if not user_name:
-                    user_name = user.email.split("@")[0]
-
-                return {
-                    "email": user.email,
-                    "name": user_name,
-                }
-
+            logger.warning(f"No email found for user {user_id}")
             return None
 
         except Exception as e:
@@ -405,12 +412,17 @@ def get_scheduler() -> ReminderScheduler:
 
 def start_scheduler():
     """Start the global scheduler"""
+    logger.info("=" * 60)
+    logger.info("INITIALIZING REMINDER SCHEDULER")
+    logger.info("=" * 60)
     scheduler = get_scheduler()
     scheduler.start()
+    logger.info("Scheduler startup completed")
 
 
 def stop_scheduler():
     """Stop the global scheduler"""
     global _scheduler_instance
     if _scheduler_instance:
+        logger.info("Stopping reminder scheduler...")
         _scheduler_instance.stop()
