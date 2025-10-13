@@ -16,7 +16,7 @@ export default function ActivityCard({ activity }: ActivityCardProps) {
           <h3 className="font-semibold text-dark">{activity.title}</h3>
           <div className="flex items-center gap-1 mt-1 text-sm text-primary">
             <Clock size={14} />
-            <span>{activity.time}</span>
+            <span>{activity.time.substring(0, 5)}</span>
           </div>
           {activity.location && (
             <div className="flex items-center gap-1 mt-1 text-sm text-primary">

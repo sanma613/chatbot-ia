@@ -15,15 +15,21 @@ import { Notification } from '@/types/notifications';
 interface NotificationCardProps {
   notification: Notification;
   onMarkAsRead: (id: string) => void;
+  onMarkAsUnread?: (id: string) => void;
   onDismiss: (id: string) => void;
   onMarkCompleted: (activityId: string) => void;
+  onRestore?: (id: string) => void;
+  isDismissed?: boolean;
 }
 
 export default function NotificationCard({
   notification,
   onMarkAsRead,
+  onMarkAsUnread,
   onDismiss,
   onMarkCompleted,
+  onRestore,
+  isDismissed = false,
 }: NotificationCardProps) {
   const [isCompleting, setIsCompleting] = useState(false);
 
@@ -54,15 +60,22 @@ export default function NotificationCard({
     }
   };
 
-  // Formatear fecha relativa
+  // Formatear fecha relativa (convierte UTC a hora local automáticamente)
   const formatRelativeDate = (dateString: string) => {
+    // JavaScript convierte automáticamente UTC a hora local del navegador
     const date = new Date(dateString);
     const now = new Date();
-    const diffInHours = Math.floor(
-      (now.getTime() - date.getTime()) / (1000 * 60 * 60)
+
+    // Calcular diferencia en minutos para más precisión
+    const diffInMinutes = Math.floor(
+      (now.getTime() - date.getTime()) / (1000 * 60)
     );
 
-    if (diffInHours < 1) return 'Hace unos minutos';
+    if (diffInMinutes < 1) return 'Justo ahora';
+    if (diffInMinutes < 60)
+      return `Hace ${diffInMinutes} minuto${diffInMinutes > 1 ? 's' : ''}`;
+
+    const diffInHours = Math.floor(diffInMinutes / 60);
     if (diffInHours < 24)
       return `Hace ${diffInHours} hora${diffInHours > 1 ? 's' : ''}`;
 
@@ -111,8 +124,8 @@ export default function NotificationCard({
               <div className="flex flex-wrap gap-4 text-sm text-dark">
                 <div className="flex items-center">
                   <Calendar className="w-4 h-4 mr-1" />
-                  {new Date(notification.date).toLocaleDateString('es-ES')} a
-                  las {notification.time}
+                  {notification.date.split('-').reverse().join('/')} a las{' '}
+                  {notification.time}
                 </div>
                 {notification.location && (
                   <div className="flex items-center">
@@ -125,52 +138,81 @@ export default function NotificationCard({
 
             {/* Acciones */}
             <div className="flex flex-wrap gap-2">
-              {!notification.isRead && (
+              {isDismissed ? (
+                // Botón de restaurar para notificaciones descartadas
                 <button
-                  onClick={() => onMarkAsRead(notification.id)}
+                  onClick={() => onRestore?.(notification.id)}
                   className="px-3 py-1.5 bg-blue-100 text-blue-800 rounded-md text-sm font-medium hover:bg-blue-200 transition-colors"
                 >
-                  Marcar como leída
+                  Restaurar
                 </button>
-              )}
-
-              {(notification.type === 'reminder' ||
-                notification.type === 'upcoming') && (
-                <button
-                  onClick={() => handleMarkCompleted(notification.activityId)}
-                  disabled={isCompleting}
-                  className={clsx(
-                    'px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2',
-                    {
-                      'bg-green-100 text-green-800 hover:bg-green-200':
-                        !isCompleting,
-                      'bg-gray-100 text-gray-500 cursor-not-allowed':
-                        isCompleting,
-                    }
+              ) : (
+                <>
+                  {!notification.isRead ? (
+                    <button
+                      onClick={() => onMarkAsRead(notification.id)}
+                      className="px-3 py-1.5 bg-blue-100 text-blue-800 rounded-md text-sm font-medium hover:bg-blue-200 transition-colors"
+                    >
+                      Marcar como leída
+                    </button>
+                  ) : (
+                    onMarkAsUnread && (
+                      <button
+                        onClick={() => onMarkAsUnread(notification.id)}
+                        className="px-3 py-1.5 text-blue-600 text-sm font-medium hover:underline"
+                      >
+                        Marcar como no leída
+                      </button>
+                    )
                   )}
-                >
-                  {isCompleting && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {isCompleting ? 'Completando...' : 'Marcar como completada'}
-                </button>
-              )}
 
-              <button
-                onClick={() => onDismiss(notification.id)}
-                className="px-3 py-1.5 bg-gray-100 text-dark rounded-md text-sm font-medium hover:bg-gray-200 transition-colors"
-              >
-                Descartar
-              </button>
+                  {(notification.type === 'reminder' ||
+                    notification.type === 'upcoming') && (
+                    <button
+                      onClick={() =>
+                        handleMarkCompleted(notification.activityId)
+                      }
+                      disabled={isCompleting}
+                      className={clsx(
+                        'px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2',
+                        {
+                          'bg-green-100 text-green-800 hover:bg-green-200':
+                            !isCompleting,
+                          'bg-gray-100 text-gray-500 cursor-not-allowed':
+                            isCompleting,
+                        }
+                      )}
+                    >
+                      {isCompleting && (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      )}
+                      {isCompleting
+                        ? 'Completando...'
+                        : 'Marcar como completada'}
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => onDismiss(notification.id)}
+                    className="px-3 py-1.5 bg-gray-100 text-dark rounded-md text-sm font-medium hover:bg-gray-200 transition-colors"
+                  >
+                    Descartar
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Botón de cerrar */}
-        <button
-          onClick={() => onDismiss(notification.id)}
-          className="flex-shrink-0 text-gray-400 hover:text-dark transition-colors ml-4"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        {/* Botón de cerrar - solo para notificaciones activas */}
+        {!isDismissed && (
+          <button
+            onClick={() => onDismiss(notification.id)}
+            className="flex-shrink-0 text-gray-400 hover:text-dark transition-colors ml-4"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
       </div>
     </div>
   );

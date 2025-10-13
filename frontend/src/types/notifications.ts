@@ -26,4 +26,10 @@ export interface ActivityStatus {
   daysUntilDue: number;
 }
 
-export type NotificationFilter = 'all' | 'unread' | 'overdue' | 'upcoming';
+export type NotificationFilter =
+  | 'all'
+  | 'unread'
+  | 'overdue'
+  | 'upcoming'
+  | 'completed'
+  | 'dismissed';

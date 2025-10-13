@@ -5,12 +5,14 @@ interface NotificationFiltersProps {
   filter: NotificationFilter;
   setFilter: (filter: NotificationFilter) => void;
   notifications: Notification[];
+  dismissedCount: number;
 }
 
 export default function NotificationFilters({
   filter,
   setFilter,
   notifications,
+  dismissedCount,
 }: NotificationFiltersProps) {
   const filterCounts = {
     all: notifications.length,
@@ -19,6 +21,8 @@ export default function NotificationFilters({
     upcoming: notifications.filter(
       (n) => n.type === 'upcoming' || n.type === 'reminder'
     ).length,
+    completed: notifications.filter((n) => n.type === 'completed').length,
+    dismissed: dismissedCount,
   };
 
   const filterButtons = [
@@ -35,6 +39,18 @@ export default function NotificationFilters({
       label: 'Próximas',
       count: filterCounts.upcoming,
       color: 'orange',
+    },
+    {
+      key: 'completed' as const,
+      label: 'Completadas',
+      count: filterCounts.completed,
+      color: 'green',
+    },
+    {
+      key: 'dismissed' as const,
+      label: 'Descartadas',
+      count: filterCounts.dismissed,
+      color: 'slate',
     },
   ];
 
@@ -54,6 +70,10 @@ export default function NotificationFilters({
                   filter === button.key && button.color === 'red',
                 'bg-orange-600 text-white':
                   filter === button.key && button.color === 'orange',
+                'bg-green-600 text-white':
+                  filter === button.key && button.color === 'green',
+                'bg-slate-700 text-white':
+                  filter === button.key && button.color === 'slate',
                 'bg-gray-100 text-dark hover:bg-gray-200':
                   filter !== button.key,
               }

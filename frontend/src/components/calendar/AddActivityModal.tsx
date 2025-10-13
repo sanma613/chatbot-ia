@@ -19,6 +19,9 @@ export default function AddActivityModal({
 }: AddActivityModalProps) {
   if (!isOpen) return null;
 
+  // Get today's date in YYYY-MM-DD format for min date validation
+  const today = new Date().toISOString().split('T')[0];
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white p-6 rounded-lg w-96 max-w-[90vw]">
@@ -52,6 +55,7 @@ export default function AddActivityModal({
                 type="date"
                 value={newActivity.date}
                 onChange={(e) => onChange('date', e.target.value)}
+                min={today}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-primary text-dark"
               />
             </div>

@@ -27,11 +27,8 @@
 ### Archivos de Configuración y Entorno ###
 # Ignorar archivos de entorno en ambos directorios
 .env
-.env.*
 /frontend/.env
-/frontend/.env.*
 /backend/.env
-/backend/.env.*
 
 ### Archivos de Sistema y Vercel ###
 .DS_Store

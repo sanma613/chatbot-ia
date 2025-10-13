@@ -16,6 +16,10 @@ export default function EmptyNotifications({
         return 'No hay actividades vencidas';
       case 'upcoming':
         return 'No hay notificaciones próximas';
+      case 'completed':
+        return 'No hay actividades completadas';
+      case 'dismissed':
+        return 'No hay notificaciones descartadas';
       default:
         return 'No tienes notificaciones en este momento';
     }

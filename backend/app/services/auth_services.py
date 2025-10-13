@@ -19,7 +19,14 @@ def get_user_from_token(token: str) -> Any:
 def register_user(email: str, password: str, full_name: str, role: str = "user") -> Any:
     """Registrar nuevo usuario en Supabase"""
     try:
-        response = supabase_.auth.sign_up({"email": email, "password": password})
+        # Incluir el nombre en user_metadata para que esté disponible en auth
+        response = supabase_.auth.sign_up(
+            {
+                "email": email,
+                "password": password,
+                "options": {"data": {"name": full_name, "full_name": full_name}},
+            }
+        )
 
         if response.user is None:
             raise HTTPException(status_code=400, detail="Error creando usuario")
