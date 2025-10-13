@@ -34,3 +34,11 @@ assert SUPABASE_KEY is not None
 supabase_: Client = create_client(
     SUPABASE_URL, SUPABASE_KEY
 )  # Inicializar el cliente de Supabase con la URL y la clave de servicio
+
+
+def get_supabase() -> Client:
+    """
+    Dependency function to get Supabase client
+    Returns the initialized Supabase client
+    """
+    return supabase_

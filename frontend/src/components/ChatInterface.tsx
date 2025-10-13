@@ -2,11 +2,14 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Mic, MicOff, Paperclip, Send } from 'lucide-react';
-import Image from 'next/image';
-import ReactMarkdown from 'react-markdown';
-import { ThumbsDownIcon, ThumbsUpIcon } from 'lucide-react';
+import removeMarkdown from 'remove-markdown';
 import { useUser } from '@/hooks/useUser';
 import { cn } from '@/lib/Utils';
+import ChatBase from './chat/ChatBase';
+import {
+  sendChatMessage,
+  rateMessage as rateMessageAPI,
+} from '@/lib/conversationApi';
 
 type Question = {
   id: number;
@@ -14,11 +17,12 @@ type Question = {
 };
 
 type Message = {
-  id: number;
+  id: number | string; // Support both number (local) and string (UUID from API)
   sender: 'UniBot' | 'user';
   text: string;
   timestamp: string;
   avatar?: string;
+  rating?: 'up' | 'down' | null;
 };
 
 // Tipos para Web Speech API
@@ -51,36 +55,112 @@ declare global {
   }
 }
 
-const UserAvatar = ({ fullName }: { fullName?: string }) => {
-  const firstLetter = fullName?.charAt(0)?.toUpperCase() || 'U';
-  return (
-    <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-white font-bold">
-      {firstLetter}
-    </div>
-  );
-};
+interface ChatInterfaceProps {
+  initialMessages?: Message[];
+  conversationId?: string;
+  conversationTitle?: string;
+}
 
-export default function ChatInterface() {
+export default function ChatInterface({
+  initialMessages = [],
+  conversationId: propConversationId,
+  conversationTitle,
+}: ChatInterfaceProps) {
   const { user, loading } = useUser();
   const [inputValue, setInputValue] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [messageRatings, setMessageRatings] = useState<
-    Record<number, 'up' | 'down' | null>
+    Record<number | string, 'up' | 'down' | null>
   >({});
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [faqsLoaded, setFaqsLoaded] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeechSupported, setIsSpeechSupported] = useState(true);
   const [voiceMode, setVoiceMode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
   const [speakResponses, setSpeakResponses] = useState(false);
+  // Conversation tracking
+  const [conversationId, setConversationId] = useState<string | undefined>(
+    propConversationId
+  );
+  // Store latest assistant message ID for potential future features (e.g., message actions)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [assistantMessageId, setAssistantMessageId] = useState<
+    string | undefined
+  >();
+  // Track if we're creating the first conversation
+  const [isCreatingConversation, setIsCreatingConversation] = useState(false);
+  // Track if we're waiting for bot response (cooldown)
+  const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
   // Refs to hold latest values for callbacks (avoid stale closures)
   const speakResponsesRef = useRef<boolean>(speakResponses);
   const voiceModeRef = useRef<boolean>(voiceMode);
   const ttsPlayingRef = useRef<boolean>(false);
   const waitingForResponseRef = useRef<boolean>(false);
   const blockedRef = useRef<boolean>(blocked);
+
+  // Helper function to create welcome message with FAQs
+  const createWelcomeMessage = useCallback(
+    (questionsArray: Question[]): Message => {
+      if (questionsArray.length > 0) {
+        const enumerated = questionsArray
+          .map((q: Question, i: number) => `${i + 1}. ${q.question}`)
+          .join('\n');
+
+        const greetingWithFAQs = `¡Hola! Soy UniBot 🤖. Estas son algunas preguntas frecuentes que puedo responder:\n\n${enumerated}\n\nTambién puedes hacerme cualquier pregunta sobre la universidad o escribir 'Agente' para hablar con un agente de soporte.`;
+
+        return {
+          id: 'welcome-local',
+          sender: 'UniBot',
+          avatar: '/images/logo_uni.png',
+          text: greetingWithFAQs,
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        };
+      } else {
+        // Fallback simple greeting
+        return {
+          id: 'welcome-local',
+          sender: 'UniBot',
+          avatar: '/images/logo_uni.png',
+          text: '¡Hola! Soy UniBot 🤖. ¿En qué puedo ayudarte hoy?',
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        };
+      }
+    },
+    []
+  );
+
+  // Sync messages when initialMessages change (for conversation history)
+  // Always prepend welcome message - wait for FAQs to load first
+  useEffect(() => {
+    if (initialMessages.length > 0 && faqsLoaded) {
+      // Prepend welcome message to loaded conversation
+      const welcomeMsg = createWelcomeMessage(questions);
+      setMessages([welcomeMsg, ...initialMessages]);
+    }
+  }, [initialMessages, questions, createWelcomeMessage, faqsLoaded]);
+
+  // Initialize messageRatings from loaded messages
+  useEffect(() => {
+    if (initialMessages.length > 0) {
+      const ratings: Record<number | string, 'up' | 'down' | null> = {};
+      initialMessages.forEach((msg) => {
+        if (msg.rating) {
+          ratings[msg.id] = msg.rating;
+        }
+      });
+      setMessageRatings(ratings);
+    }
+  }, [initialMessages]);
 
   useEffect(() => {
     speakResponsesRef.current = speakResponses;
@@ -93,6 +173,13 @@ export default function ChatInterface() {
   useEffect(() => {
     blockedRef.current = blocked;
   }, [blocked]);
+
+  // Autofocus input after cooldown ends
+  useEffect(() => {
+    if (!isWaitingForResponse && !blocked && !voiceMode && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isWaitingForResponse, blocked, voiceMode]);
 
   // TTS helper: uses SpeechSynthesis and restarts recognition when finished
   const speakText = useCallback((text: string) => {
@@ -118,7 +205,9 @@ export default function ChatInterface() {
       // mark that we're about to play TTS so recognition.onend won't restart the mic
       ttsPlayingRef.current = true;
 
-      const utter = new SpeechSynthesisUtterance(text);
+      const cleanText = removeMarkdown(text);
+
+      const utter = new SpeechSynthesisUtterance(cleanText);
       utter.lang = 'es-ES';
       // choose spanish voice if available
       const voices = synth.getVoices();
@@ -150,15 +239,26 @@ export default function ChatInterface() {
     }
   }, []);
 
-  // 🔹 Enviar pregunta de FAQ (memoized)
+  // 🔹 Enviar pregunta de FAQ (memoized) - WITH CONVERSATION TRACKING
   const sendFaqToBackend = useCallback(
     async (questionId: number) => {
       const url = process.env.NEXT_PUBLIC_BACKEND_URL;
       try {
+        // DECISION POINT: Does conversation exist?
+        const isFirstMessage = !conversationId;
+
+        if (isFirstMessage) {
+          setIsCreatingConversation(true);
+        }
+
+        // Use POST endpoint with conversation tracking
         const res = await fetch(`${url}/faq/get_answer/${questionId}`, {
-          method: 'GET',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
+          body: JSON.stringify({
+            conversation_id: conversationId || null,
+          }),
         });
 
         if (res.ok) {
@@ -166,57 +266,195 @@ export default function ChatInterface() {
 
           const answerText = data.answer ?? '';
 
+          // Update conversation ID if this is a new conversation
+          if (data.conversation_id && !conversationId) {
+            setConversationId(data.conversation_id);
+            localStorage.setItem('currentConversationId', data.conversation_id);
+
+            // If it was first message, fetch full conversation to get all messages
+            if (isFirstMessage) {
+              const { getConversationById } = await import(
+                '@/lib/conversationApi'
+              );
+              const conversationData = await getConversationById(
+                data.conversation_id
+              );
+
+              // Convert messages to UI format
+              const convertedMessages: Message[] =
+                conversationData.messages.map((msg) => ({
+                  id: msg.id,
+                  sender: msg.role === 'user' ? 'user' : 'UniBot',
+                  text: msg.content,
+                  timestamp:
+                    typeof msg.timestamp === 'string'
+                      ? new Date(msg.timestamp).toLocaleTimeString('es-ES', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : new Date().toLocaleTimeString('es-ES', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        }),
+                  avatar:
+                    msg.role === 'assistant'
+                      ? '/images/logo_uni.png'
+                      : undefined,
+                  rating: msg.rating,
+                }));
+
+              // Prepend welcome message and set messages
+              const welcomeMsg = createWelcomeMessage(questions);
+              setMessages([welcomeMsg, ...convertedMessages]);
+
+              setIsCreatingConversation(false);
+            } else {
+              // Existing conversation - just append the response
+              setMessages((prev: Message[]) => [
+                ...prev,
+                {
+                  id: data.assistant_message_id || Date.now(),
+                  sender: 'UniBot',
+                  avatar: '/images/logo_uni.png',
+                  text: answerText,
+                  timestamp: new Date().toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }),
+                },
+              ]);
+            }
+          } else {
+            // Existing conversation - just append the response
+            setMessages((prev: Message[]) => [
+              ...prev,
+              {
+                id: data.assistant_message_id || Date.now(),
+                sender: 'UniBot',
+                avatar: '/images/logo_uni.png',
+                text: answerText,
+                timestamp: new Date().toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+              },
+            ]);
+          }
+
+          // Store assistant message ID for potential rating
+          if (data.assistant_message_id) {
+            setAssistantMessageId(data.assistant_message_id);
+          }
+
           // chatbot responded: we're no longer waiting
           waitingForResponseRef.current = false;
-
-          setMessages((prev: Message[]) => [
-            ...prev,
-            {
-              id: Date.now(),
-              sender: 'UniBot',
-              avatar: '/images/logo_uni.png',
-              text: answerText,
-              timestamp: new Date().toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              }),
-            },
-          ]);
+          setIsWaitingForResponse(false);
 
           // speak and auto-restart mic
           speakText(answerText);
         }
       } catch (error) {
         console.error('Error fetching FAQ answer:', error);
+        setIsCreatingConversation(false);
         waitingForResponseRef.current = false;
+        setIsWaitingForResponse(false);
       }
     },
-    [speakText]
+    [speakText, conversationId, createWelcomeMessage, questions]
   );
 
-  // 🔹 Enviar pregunta libre al chatbot académico (memoized)
+  // 🔹 Enviar pregunta libre al chatbot académico (memoized) - WITH AUTOMATIC CONVERSATION CREATION
   const sendToAcademicChatbot = useCallback(
     async (question: string) => {
-      const url = process.env.NEXT_PUBLIC_BACKEND_URL;
       try {
-        const res = await fetch(`${url}/chatbot/ask`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ question }),
-        });
+        // DECISION POINT: Does conversation exist?
+        if (!conversationId) {
+          // ===== FIRST MESSAGE - CREATE CONVERSATION (WITHOUT WELCOME MESSAGE) =====
+          setIsCreatingConversation(true);
 
-        if (res.ok) {
-          const data = await res.json();
+          // Import the new API function
+          const { startConversation } = await import('@/lib/conversationApi');
+
+          // Create conversation with user message + AI response
+          // Welcome message is NOT stored - added dynamically in UI
+          const conversationData = await startConversation(question);
+
+          setIsCreatingConversation(false);
+
+          // Update conversation ID
+          setConversationId(conversationData.conversation.id);
+
+          // Store in localStorage for persistence
+          localStorage.setItem(
+            'currentConversationId',
+            conversationData.conversation.id
+          );
+
+          // Convert messages to UI format
+          const convertedMessages: Message[] = conversationData.messages.map(
+            (msg) => ({
+              id: msg.id,
+              sender: msg.role === 'user' ? 'user' : 'UniBot',
+              text: msg.content,
+              timestamp:
+                typeof msg.timestamp === 'string'
+                  ? new Date(msg.timestamp).toLocaleTimeString('es-ES', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  : new Date().toLocaleTimeString('es-ES', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    }),
+              avatar:
+                msg.role === 'assistant' ? '/images/logo_uni.png' : undefined,
+            })
+          );
+
+          // Prepend welcome message and set messages
+          const welcomeMsg = createWelcomeMessage(questions);
+          setMessages([welcomeMsg, ...convertedMessages]);
+
+          // Speak the AI response (last message)
+          const aiResponse =
+            conversationData.messages[conversationData.messages.length - 1];
+          if (aiResponse && aiResponse.role === 'assistant') {
+            speakText(aiResponse.content);
+          }
+
+          // Store latest assistant message ID
+          if (aiResponse) {
+            setAssistantMessageId(aiResponse.id);
+          }
+
+          // Check if conversation was escalated
+          if (conversationData.conversation.is_escalated) {
+            setBlocked(true);
+            setVoiceMode(false);
+            setSpeakResponses(false);
+          }
+
+          waitingForResponseRef.current = false;
+          setIsWaitingForResponse(false);
+        } else {
+          // ===== SUBSEQUENT MESSAGE - USE EXISTING CONVERSATION =====
+          const data = await sendChatMessage(question, conversationId);
+
           const answerText = data.answer ?? '';
+
+          // Store the assistant message ID for potential rating
+          if (data.assistant_message_id) {
+            setAssistantMessageId(data.assistant_message_id);
+          }
 
           // chatbot responded: we're no longer waiting
           waitingForResponseRef.current = false;
+          setIsWaitingForResponse(false);
 
           setMessages((prev: Message[]) => [
             ...prev,
             {
-              id: Date.now(),
+              id: data.assistant_message_id || Date.now(),
               sender: 'UniBot',
               avatar: '/images/logo_uni.png',
               text: answerText,
@@ -228,36 +466,60 @@ export default function ChatInterface() {
           ]);
 
           speakText(answerText);
-        } else {
-          const errorMsg =
-            'Hubo un problema al procesar tu consulta. Intenta nuevamente más tarde.';
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: Date.now(),
-              sender: 'UniBot',
-              avatar: '/images/logo_uni.png',
-              text: errorMsg,
-              timestamp: new Date().toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              }),
-            },
-          ]);
 
-          speakText(errorMsg);
+          // Check if conversation was escalated
+          if (data.escalated) {
+            setBlocked(true);
+            setVoiceMode(false);
+            setSpeakResponses(false);
+          }
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Error sending message to academic chatbot:', error);
+        setIsCreatingConversation(false);
         waitingForResponseRef.current = false;
+        setIsWaitingForResponse(false);
+
+        // If conversation not found (404), clear the invalid conversation ID
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        const is404 =
+          errorMessage.includes('404') || errorMessage.includes('not found');
+
+        if (is404) {
+          console.warn(
+            'Conversation not found. Clearing stored conversation ID.'
+          );
+          setConversationId(undefined);
+          localStorage.removeItem('currentConversationId');
+        }
+
+        const errorMsg = is404
+          ? 'La conversación no existe. Por favor, inicia una nueva conversación.'
+          : 'Hubo un problema al procesar tu consulta. Intenta nuevamente más tarde.';
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now(),
+            sender: 'UniBot',
+            avatar: '/images/logo_uni.png',
+            text: errorMsg,
+            timestamp: new Date().toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+          },
+        ]);
+
+        speakText(errorMsg);
       }
     },
-    [speakText]
+    [speakText, conversationId, createWelcomeMessage, questions]
   );
   // 🔹 Manejo del envío de mensajes (texto) - usa las funciones memoizadas
   const handleSendMessageWithText = useCallback(
     (text: string) => {
-      if (text.trim() === '' || blocked) return;
+      if (text.trim() === '' || blocked || isWaitingForResponse) return;
 
       const newMessage: Message = {
         id: Date.now(),
@@ -297,8 +559,9 @@ export default function ChatInterface() {
 
       const selectedNumber = parseInt(trimmed, 10);
 
-      // mark waiting for response so mic doesn't auto-restart
+      // mark waiting for response so mic doesn't auto-restart and UI shows cooldown
       waitingForResponseRef.current = true;
+      setIsWaitingForResponse(true);
 
       if (
         !isNaN(selectedNumber) &&
@@ -308,12 +571,19 @@ export default function ChatInterface() {
         const selectedQuestion = questions[selectedNumber - 1];
         sendFaqToBackend(selectedQuestion.id);
       } else {
+        // No need to pass welcome message - it's added dynamically
         sendToAcademicChatbot(text);
       }
 
       setInputValue('');
     },
-    [blocked, questions, sendFaqToBackend, sendToAcademicChatbot]
+    [
+      blocked,
+      isWaitingForResponse,
+      questions,
+      sendFaqToBackend,
+      sendToAcademicChatbot,
+    ]
   );
 
   const scrollToBottom = () => {
@@ -502,10 +772,22 @@ export default function ChatInterface() {
     }
   };
 
-  // 🔹 Cargar FAQs desde el backend
+  // 🔹 Cargar FAQs desde el backend (siempre, para poder responder a números)
+  // Note: Removed localStorage conversation loading - conversations should be accessed via /chat/{id} route
+  // When user goes to /chat, it should always start a fresh conversation
+
   useEffect(() => {
+    const isExistingConversation = initialMessages.length > 0;
+
     async function fetchQuestions() {
       const url = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+      // Si no hay URL del backend, salir silenciosamente
+      if (!url) {
+        console.warn('Backend URL no configurada - modo sin conexión');
+        return;
+      }
+
       try {
         const res = await fetch(`${url}/faq/list-questions`, {
           method: 'GET',
@@ -516,46 +798,60 @@ export default function ChatInterface() {
         if (res.ok) {
           const data = await res.json();
           setQuestions(data.questions);
+          setFaqsLoaded(true); // Mark FAQs as loaded
 
-          const enumerated = data.questions
-            .map((q: Question, i: number) => `${i + 1}. ${q.question}`)
-            .join('\n');
+          // Solo mostrar el mensaje de bienvenida si es un chat nuevo
+          if (!isExistingConversation) {
+            // Show welcome message with FAQs
+            const welcomeMsg = createWelcomeMessage(data.questions);
+            setMessages([welcomeMsg]);
 
-          const greeting = `¡Hola! Soy UniBot 🤖. Estas son algunas preguntas frecuentes que puedo responder:\n\n${enumerated}\n`;
-
-          setMessages([
-            {
-              id: Date.now(),
-              sender: 'UniBot',
-              avatar: '/images/logo_uni.png',
-              text: greeting,
-              timestamp: new Date().toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              }),
-            },
-          ]);
-
-          // speak greeting if hands-free mode active
-          speakText(greeting);
+            // speak greeting if hands-free mode active
+            speakText(welcomeMsg.text);
+          }
         }
-      } catch (err) {
-        console.error('Error fetching questions:', err);
+      } catch {
+        console.warn(
+          'No se pudieron cargar las FAQs - trabajando en modo sin conexión'
+        );
+        setFaqsLoaded(true); // Mark as loaded even on error
+        // En modo desarrollo/sin backend, mostrar mensaje simple solo en chat nuevo
+        if (!isExistingConversation) {
+          const welcomeMsg = createWelcomeMessage([]);
+          setMessages([welcomeMsg]);
+        }
       }
     }
 
     fetchQuestions();
-  }, [speakText]);
+  }, [speakText, initialMessages.length, createWelcomeMessage]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="w-12 h-12 border-4 border-black border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
-  }
+  // 🔹 Manejo de calificación de mensajes - WITH API INTEGRATION
+  const handleRateMessage = useCallback(
+    async (id: number | string, rating: 'up' | 'down' | null) => {
+      // Update local state immediately for responsive UI
+      setMessageRatings((prev) => ({
+        ...prev,
+        [id]: rating,
+      }));
 
-  // 🔹 Función auxiliar para enviar mensajes (usado por el botón y por voz)
+      // If it's a string (UUID from API), send rating to backend
+      if (typeof id === 'string' && rating) {
+        try {
+          await rateMessageAPI(id, rating);
+          console.log('Message rated successfully');
+        } catch (error) {
+          console.error('Failed to rate message:', error);
+          // Optionally revert the rating in case of error
+          setMessageRatings((prev) => ({
+            ...prev,
+            [id]: null,
+          }));
+        }
+      }
+    },
+    []
+  );
 
   // 🔹 Manejo del envío de mensajes
   const handleSendMessage = () => {
@@ -566,210 +862,87 @@ export default function ChatInterface() {
     if (event.key === 'Enter') handleSendMessage();
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="w-12 h-12 border-4 border-black border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  // 🔹 Handle new conversation button
+  const handleNewConversation = () => {
+    // Clear current conversation
+    setConversationId(undefined);
+    localStorage.removeItem('currentConversationId');
+
+    // Show welcome message
+    const welcomeMsg = createWelcomeMessage(questions);
+    setMessages([welcomeMsg]);
+
+    // Reset other states
+    setBlocked(false);
+    setVoiceMode(false);
+    setSpeakResponses(false);
+    setMessageRatings({});
+
+    // Trigger FAQ reload to show welcome message
+    window.location.href = '/chat';
+  };
+
   return (
     <div className="flex flex-col h-full">
+      {/* Header de conversación */}
+      {(conversationTitle || conversationId) && (
+        <div className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+          <div>
+            <h1 className="text-xl font-semibold text-dark">
+              {conversationTitle || 'Conversación en curso'}
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">
+              {conversationTitle
+                ? 'Continuando conversación anterior'
+                : 'Conversación activa'}
+            </p>
+          </div>
+          <button
+            onClick={handleNewConversation}
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-secondary transition-colors text-sm font-medium"
+          >
+            Nueva Conversación
+          </button>
+        </div>
+      )}
+
+      {/* Loading indicator when creating conversation */}
+      {isCreatingConversation && (
+        <div className="bg-blue-50 border-b border-blue-200 px-6 py-3">
+          <div className="flex items-center gap-3">
+            <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-sm text-blue-700">
+              Creando conversación y guardando mensajes...
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Chat messages */}
       <div className="flex-1 p-6 overflow-y-auto">
-        <div className="space-y-4">
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={cn('flex flex-col group', {
-                'items-end': msg.sender === 'user',
-                'items-start': msg.sender !== 'user',
-              })}
-            >
-              <div
-                className={cn('flex items-start gap-4', {
-                  'justify-end': msg.sender === 'user',
-                })}
-              >
-                {msg.sender !== 'user' && msg.avatar && (
-                  <Image
-                    src={msg.avatar}
-                    alt="Bot Avatar"
-                    width={50}
-                    height={40}
-                    className="rounded-full object-cover"
-                  />
-                )}
-
-                <div
-                  className={cn(
-                    'relative max-w-lg p-4 rounded-2xl break-words',
-                    {
-                      'bg-primary text-white rounded-tr-none shadow-md':
-                        msg.sender === 'user',
-                      'bg-gray-100 text-dark rounded-tl-none border border-gray shadow-sm':
-                        msg.sender !== 'user',
-                    }
-                  )}
-                >
-                  {msg.sender === 'UniBot' ? (
-                    <div className="prose prose-sm max-w-none prose-headings:mt-2 prose-headings:mb-2 prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5">
-                      <ReactMarkdown
-                        components={{
-                          h1: ({ children }) => (
-                            <h1 className="text-xl font-bold text-dark mb-2 mt-2">
-                              {children}
-                            </h1>
-                          ),
-                          h2: ({ children }) => (
-                            <h2 className="text-lg font-bold text-dark mb-2 mt-2">
-                              {children}
-                            </h2>
-                          ),
-                          h3: ({ children }) => (
-                            <h3 className="text-base font-bold text-dark mb-2 mt-2">
-                              {children}
-                            </h3>
-                          ),
-                          p: ({ children }) => (
-                            <p className="text-dark mb-2 leading-relaxed whitespace-pre-wrap">
-                              {children}
-                            </p>
-                          ),
-                          strong: ({ children }) => (
-                            <strong className="font-bold text-dark">
-                              {children}
-                            </strong>
-                          ),
-                          em: ({ children }) => (
-                            <em className="italic text-dark">{children}</em>
-                          ),
-                          ul: ({ children }) => (
-                            <ul className="list-disc list-inside space-y-1 my-2">
-                              {children}
-                            </ul>
-                          ),
-                          ol: ({ children }) => (
-                            <ol className="list-decimal list-inside space-y-1 my-2">
-                              {children}
-                            </ol>
-                          ),
-                          li: ({ children }) => (
-                            <li className="text-dark">{children}</li>
-                          ),
-                          blockquote: ({ children }) => (
-                            <blockquote className="border-l-4 border-primary pl-4 py-2 my-2 bg-blue-50 rounded">
-                              {children}
-                            </blockquote>
-                          ),
-                          code: ({ children }) => (
-                            <code className="bg-gray-200 px-2 py-1 rounded text-sm font-mono text-primary">
-                              {children}
-                            </code>
-                          ),
-                          pre: ({ children }) => (
-                            <pre className="bg-gray-800 text-gray-100 p-3 rounded-lg overflow-x-auto my-2">
-                              {children}
-                            </pre>
-                          ),
-                        }}
-                      >
-                        {msg.text}
-                      </ReactMarkdown>
-                    </div>
-                  ) : (
-                    <p className="whitespace-pre-wrap">{msg.text}</p>
-                  )}
-                  <span
-                    className={cn('text-xs mt-2 block', {
-                      'text-blue-200': msg.sender === 'user',
-                      'text-gray-500': msg.sender !== 'user',
-                    })}
-                  >
-                    {msg.timestamp}
-                  </span>
-                </div>
-
-                {msg.sender === 'user' && (
-                  <UserAvatar fullName={user?.full_name} />
-                )}
-              </div>
-
-              {/* Rating buttons - Outside message bubble, always visible */}
-              <div
-                className={cn('flex items-center gap-2 mt-2 mb-2 ml-16', {
-                  'ml-0 mr-14': msg.sender === 'user',
-                })}
-              >
-                <button
-                  onClick={async () => {
-                    const current = messageRatings[msg.id] || null;
-                    const newVal: 'up' | null = current === 'up' ? null : 'up';
-                    setMessageRatings((prev) => ({
-                      ...prev,
-                      [msg.id]: newVal,
-                    }));
-                    try {
-                      await fetch(
-                        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chatbot/rate`,
-                        {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          credentials: 'include',
-                          body: JSON.stringify({
-                            messageId: msg.id,
-                            sender: msg.sender,
-                            rating: newVal,
-                          }),
-                        }
-                      );
-                    } catch (err) {
-                      console.warn('Failed to send rating:', err);
-                    }
-                  }}
-                  className={cn('transition-all', {
-                    'text-black': messageRatings[msg.id] !== 'up',
-                    'text-blue-500': messageRatings[msg.id] === 'up',
-                    'hover:text-blue-500': messageRatings[msg.id] !== 'up',
-                  })}
-                  title="Me gusta"
-                >
-                  <ThumbsUpIcon size={18} strokeWidth={2} />
-                </button>
-                <button
-                  onClick={async () => {
-                    const current = messageRatings[msg.id] || null;
-                    const newVal: 'down' | null =
-                      current === 'down' ? null : 'down';
-                    setMessageRatings((prev) => ({
-                      ...prev,
-                      [msg.id]: newVal,
-                    }));
-                    try {
-                      await fetch(
-                        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chatbot/rate`,
-                        {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          credentials: 'include',
-                          body: JSON.stringify({
-                            messageId: msg.id,
-                            sender: msg.sender,
-                            rating: newVal,
-                          }),
-                        }
-                      );
-                    } catch (err) {
-                      console.warn('Failed to send rating:', err);
-                    }
-                  }}
-                  className={cn('transition-all', {
-                    'text-black': messageRatings[msg.id] !== 'down',
-                    'text-red-500': messageRatings[msg.id] === 'down',
-                    'hover:text-red-500': messageRatings[msg.id] !== 'down',
-                  })}
-                  title="No me gusta"
-                >
-                  <ThumbsDownIcon size={18} strokeWidth={2} />
-                </button>
-              </div>
-            </div>
-          ))}
-          <div ref={messagesEndRef}></div>
-        </div>
+        {initialMessages.length > 0 && !faqsLoaded ? (
+          // Show loader while FAQs are loading for existing conversations
+          <div className="flex flex-col items-center justify-center h-full gap-4">
+            <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-dark text-sm">Cargando conversación...</p>
+          </div>
+        ) : (
+          <ChatBase
+            messages={messages}
+            messageRatings={messageRatings}
+            onRateMessage={handleRateMessage}
+            userFullName={user?.full_name}
+            readonly={false}
+          />
+        )}
       </div>
 
       {/* Input */}
@@ -779,12 +952,19 @@ export default function ChatInterface() {
             {/* 🎤 Botón de Micrófono con animación */}
             <button
               onClick={toggleRecording}
-              disabled={blocked}
+              disabled={
+                blocked || isCreatingConversation || isWaitingForResponse
+              }
               className={cn('transition-all duration-200', {
                 'text-red-500 animate-pulse': isRecording || voiceMode,
                 'text-primary hover:text-secondary':
-                  !isRecording && !blocked && !voiceMode,
-                'text-gray-400 cursor-not-allowed': blocked,
+                  !isRecording &&
+                  !blocked &&
+                  !voiceMode &&
+                  !isCreatingConversation &&
+                  !isWaitingForResponse,
+                'text-gray-400 cursor-not-allowed':
+                  blocked || isCreatingConversation || isWaitingForResponse,
               })}
               title={
                 voiceMode
@@ -801,10 +981,14 @@ export default function ChatInterface() {
 
             <button
               className={cn('transition-colors', {
-                'text-primary hover:text-secondary': !blocked,
-                'text-gray-400 cursor-not-allowed': blocked,
+                'text-primary hover:text-secondary':
+                  !blocked && !isCreatingConversation && !isWaitingForResponse,
+                'text-gray-400 cursor-not-allowed':
+                  blocked || isCreatingConversation || isWaitingForResponse,
               })}
-              disabled={blocked}
+              disabled={
+                blocked || isCreatingConversation || isWaitingForResponse
+              }
               title="Adjuntar archivo (próximamente)"
             >
               <Paperclip size={22} />
@@ -812,28 +996,47 @@ export default function ChatInterface() {
           </div>
 
           <input
+            ref={inputRef}
             type="text"
             placeholder={
-              blocked
-                ? 'Chat bloqueado: estás en espera de un agente humano...'
-                : 'Escribe tu mensaje o usa el micrófono...'
+              isWaitingForResponse
+                ? 'Esperando respuesta...'
+                : isCreatingConversation
+                  ? 'Creando conversación...'
+                  : blocked
+                    ? 'Chat bloqueado: estás en espera de un agente humano...'
+                    : 'Escribe tu mensaje o usa el micrófono...'
             }
             className="w-full pl-24 pr-14 py-3 border-2 border-gray-200 rounded-full focus:outline-none focus:border-primary transition-colors text-dark"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyPress}
-            disabled={blocked || isRecording || voiceMode}
+            disabled={
+              blocked ||
+              isRecording ||
+              voiceMode ||
+              isCreatingConversation ||
+              isWaitingForResponse
+            }
           />
 
           <button
             className={cn(
               'absolute right-3 p-2.5 rounded-full transition-colors',
-              blocked || isRecording
+              blocked ||
+                isRecording ||
+                isCreatingConversation ||
+                isWaitingForResponse
                 ? 'bg-gray-300 text-white cursor-not-allowed'
                 : 'bg-primary text-white hover:bg-secondary'
             )}
             onClick={handleSendMessage}
-            disabled={blocked || isRecording}
+            disabled={
+              blocked ||
+              isRecording ||
+              isCreatingConversation ||
+              isWaitingForResponse
+            }
           >
             <Send size={20} />
           </button>

@@ -12,10 +12,16 @@ export default function EmptyNotifications({
     switch (filter) {
       case 'unread':
         return 'No hay notificaciones sin leer';
+      case 'read':
+        return 'No hay notificaciones leídas';
       case 'overdue':
         return 'No hay actividades vencidas';
       case 'upcoming':
         return 'No hay notificaciones próximas';
+      case 'completed':
+        return 'No hay actividades completadas';
+      case 'dismissed':
+        return 'No hay notificaciones descartadas';
       default:
         return 'No tienes notificaciones en este momento';
     }

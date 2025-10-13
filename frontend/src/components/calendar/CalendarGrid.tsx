@@ -69,7 +69,7 @@ export default function CalendarGrid({
       {/* Días del mes */}
       {days.map((day, index) => {
         if (!day) {
-          return <div key={index} className="p-4 h-24"></div>;
+          return <div key={`empty-${index}`} className="p-4 h-24"></div>;
         }
 
         const dateStr = formatDate(day);
@@ -79,10 +79,10 @@ export default function CalendarGrid({
 
         return (
           <div
-            key={day}
+            key={`day-${dateStr}`}
             onClick={() => onDayClick(day)}
             className={cn(
-              'p-2 h-24 border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors',
+              'p-2 h-24 border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors z-10',
               isToday && 'bg-primary/10 border-primary',
               isSelected && 'bg-primary/20'
             )}
@@ -106,7 +106,7 @@ export default function CalendarGrid({
                     ></div>
                   ))}
                   {dayActivities.length > 3 && (
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-black">
                       +{dayActivities.length - 3}
                     </span>
                   )}

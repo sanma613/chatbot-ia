@@ -24,7 +24,7 @@ export const getColorByType = (type: Activity['type']): string => {
     exam: 'bg-red-500',
     assignment: 'bg-yellow-500',
     meeting: 'bg-green-500',
-    other: 'bg-gray-500',
+    other: 'bg-slate-400',
   };
   return colors[type];
 };

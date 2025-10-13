@@ -1,16 +1,37 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { Conversation } from '@/app/types/chat';
-import { MessageSquare, Calendar, ArrowRight } from 'lucide-react';
+import {
+  MessageSquare,
+  Calendar,
+  ArrowRight,
+  Edit2,
+  Check,
+  X,
+  Trash2,
+} from 'lucide-react';
 import { cn } from '@/lib/Utils';
+import {
+  updateConversationTitle,
+  deleteConversation,
+} from '@/lib/conversationApi';
 
 interface ConversationCardProps {
   conversation: Conversation;
+  onTitleUpdate?: (conversationId: string, newTitle: string) => void;
+  onDelete?: (conversationId: string) => void;
 }
 
 export default function ConversationCard({
   conversation,
+  onTitleUpdate,
+  onDelete,
 }: ConversationCardProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedTitle, setEditedTitle] = useState(conversation.title);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Formatear fecha para mostrar
   const formatDate = (date: Date) => {
     const now = new Date();
@@ -35,33 +56,150 @@ export default function ConversationCard({
     }
   };
 
+  const handleSaveTitle = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!editedTitle || editedTitle.trim() === '') {
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await updateConversationTitle(conversation.id, editedTitle.trim());
+      setIsEditing(false);
+      if (onTitleUpdate) {
+        onTitleUpdate(conversation.id, editedTitle.trim());
+      }
+    } catch (error) {
+      console.error('Error updating title:', error);
+      alert('No se pudo actualizar el título');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancelEdit = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditedTitle(conversation.title);
+    setIsEditing(false);
+  };
+
+  const handleStartEdit = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsEditing(true);
+  };
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (
+      !confirm(
+        '¿Estás seguro de que quieres eliminar esta conversación? Esta acción no se puede deshacer.'
+      )
+    ) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      await deleteConversation(conversation.id);
+      if (onDelete) {
+        onDelete(conversation.id);
+      }
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      alert('No se pudo eliminar la conversación');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
-    <Link
-      href={`/chat/${conversation.id}`}
+    <div
       className={cn(
         'block p-6 bg-white rounded-lg border border-gray-200',
         'hover:border-primary hover:shadow-lg transition-all duration-200',
-        'group cursor-pointer'
+        'group'
       )}
     >
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
-          {/* Título */}
-          <h3
-            className={cn(
-              'text-lg font-semibold text-dark mb-2',
-              'group-hover:text-primary transition-colors',
-              'truncate'
+          {/* Título - Editable */}
+          <div className="flex items-center gap-2 mb-2">
+            {isEditing ? (
+              <div className="flex items-center gap-2 flex-1">
+                <input
+                  type="text"
+                  value={editedTitle}
+                  onChange={(e) => setEditedTitle(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex-1 px-3 py-1 border border-gray-300 rounded focus:outline-none focus:border-primary text-dark"
+                  maxLength={100}
+                  autoFocus
+                  disabled={isSaving}
+                />
+                <button
+                  onClick={handleSaveTitle}
+                  disabled={isSaving}
+                  className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
+                  title="Guardar"
+                >
+                  <Check className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={handleCancelEdit}
+                  disabled={isSaving}
+                  className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                  title="Cancelar"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            ) : (
+              <>
+                <Link
+                  href={`/chat/${conversation.id}`}
+                  className={cn(
+                    'flex-1 text-lg font-semibold text-dark',
+                    'group-hover:text-primary transition-colors',
+                    'truncate cursor-pointer'
+                  )}
+                >
+                  {conversation.title}
+                </Link>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={handleStartEdit}
+                    className="opacity-100 p-1 text-slate-400 hover:text-primary rounded transition-all"
+                    title="Editar título"
+                    disabled={isDeleting}
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    className="opacity-100 p-1 text-slate-400 hover:text-red-500 rounded transition-all"
+                    title="Eliminar conversación"
+                    disabled={isDeleting}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </>
             )}
-          >
-            {conversation.title}
-          </h3>
+          </div>
 
           {/* Último mensaje */}
           {conversation.lastMessage && (
-            <p className="text-dark text-sm mb-3 line-clamp-2">
-              {conversation.lastMessage}
-            </p>
+            <Link href={`/chat/${conversation.id}`} className="block">
+              <p className="text-dark text-sm mb-3 line-clamp-2 cursor-pointer">
+                {conversation.lastMessage}
+              </p>
+            </Link>
           )}
 
           {/* Metadatos */}
@@ -72,13 +210,14 @@ export default function ConversationCard({
             </div>
             <div className="flex items-center gap-1">
               <MessageSquare className="w-4 h-4" />
-              {conversation.messageCount} mensajes
+              {(conversation.messageCount || 0) + 1} mensajes
             </div>
           </div>
         </div>
 
         {/* Icono de navegación */}
-        <div
+        <Link
+          href={`/chat/${conversation.id}`}
           className={cn(
             'flex-shrink-0 ml-4',
             'text-dark group-hover:text-primary',
@@ -87,8 +226,8 @@ export default function ConversationCard({
           )}
         >
           <ArrowRight className="w-5 h-5" />
-        </div>
+        </Link>
       </div>
-    </Link>
+    </div>
   );
 }
