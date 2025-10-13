@@ -7,7 +7,12 @@ const protectedRoutes = [
   '/calendar',
   '/history',
   '/notifications',
+];
+
+// Rutas que requieren permisos de administrador
+const adminRoutes = [
   '/escalate',
+  '/admin'
 ];
 
 export async function middleware(request: NextRequest) {
@@ -17,9 +22,14 @@ export async function middleware(request: NextRequest) {
   const isProtectedRoute = protectedRoutes.some((route) =>
     pathname.startsWith(route)
   );
+  
+  // Verificar si es una ruta de administrador
+  const isAdminRoute = adminRoutes.some((route) =>
+    pathname.startsWith(route)
+  );
 
-  // Si no es una ruta protegida, continuar
-  if (!isProtectedRoute) {
+  // Si no es una ruta protegida ni de admin, continuar
+  if (!isProtectedRoute && !isAdminRoute) {
     return NextResponse.next();
   }
 
