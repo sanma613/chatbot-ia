@@ -44,13 +44,11 @@ declare global {
 interface AgentChatInterfaceProps {
   activeCase: AgentActiveCase;
   onResolve: (requestId: string) => Promise<void>;
-  onRefresh: () => void;
 }
 
 export default function AgentChatInterface({
   activeCase,
   onResolve,
-  onRefresh,
 }: AgentChatInterfaceProps) {
   const { user } = useUser();
   const [messages, setMessages] = useState<AgentMessage[]>(activeCase.messages);
@@ -63,11 +61,16 @@ export default function AgentChatInterface({
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const { uploadImage, uploading: uploadingImage } = useImageUpload();
   // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeechSupported, setIsSpeechSupported] = useState(true);
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
+  // Track if this is the first render to do instant scroll
+  const isFirstRenderRef = useRef(true);
+  // Message sending queue control - prevent multiple simultaneous sends
+  const sendingQueueRef = useRef(false);
 
   // Fetch FAQs
   useEffect(() => {
@@ -199,14 +202,23 @@ export default function AgentChatInterface({
     }
   }, [wsConnected]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (instant = false) => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: instant ? 'auto' : 'smooth',
+    });
   };
 
   // Auto-scroll only if user is near bottom (to avoid interrupting manual scrolling)
   useEffect(() => {
     const chatContainer = messagesEndRef.current?.parentElement;
     if (!chatContainer) return;
+
+    // If this is the first render, scroll instantly to bottom
+    if (isFirstRenderRef.current) {
+      scrollToBottom(true); // Instant scroll
+      isFirstRenderRef.current = false;
+      return;
+    }
 
     // Check if user is near bottom (within 100px)
     const isNearBottom =
@@ -217,20 +229,37 @@ export default function AgentChatInterface({
 
     // Only auto-scroll if user is near bottom
     if (isNearBottom) {
-      scrollToBottom();
+      scrollToBottom(false); // Smooth scroll for subsequent messages
     }
   }, [messages]);
+
+  // Autofocus input - always keep focus except when recording
+  useEffect(() => {
+    if (
+      !isRecording &&
+      inputRef.current &&
+      document.activeElement !== inputRef.current
+    ) {
+      // Only focus if not already focused to avoid interrupting user typing
+      inputRef.current.focus();
+    }
+  }, [isRecording, messages]); // Re-focus after new messages
 
   // Note: Polling removed - WebSocket handles real-time updates
 
   // 🔹 Función para enviar mensaje con texto específico (usada por input y voz)
   const sendMessageWithText = useCallback(
     async (text: string) => {
-      if (!text.trim() || sending) return;
+      // Prevent sending if already sending or queue is blocked
+      if (!text.trim() || sending || sendingQueueRef.current) {
+        console.log('⚠️ Agent: Message send blocked - already sending');
+        return;
+      }
 
       const messageContent = text.trim();
       setInputValue(''); // ✅ Limpiar input inmediatamente después de capturar el texto
       setSending(true);
+      sendingQueueRef.current = true; // Block queue
 
       try {
         // Use WebSocket if connected, otherwise fall back to HTTP
@@ -281,11 +310,15 @@ export default function AgentChatInterface({
             return [...prev, newMessage];
           });
         }
+
+        // Wait a bit to ensure message is processed
+        await new Promise((resolve) => setTimeout(resolve, 300));
       } catch (error) {
         console.error('Error enviando mensaje:', error);
         setInputValue(messageContent); // Restaurar mensaje si falla
       } finally {
         setSending(false);
+        sendingQueueRef.current = false; // Unblock queue
       }
     },
     [sending, wsConnected, wsSendMessage, activeCase.conversation.id]
@@ -376,9 +409,16 @@ export default function AgentChatInterface({
   }, [sendMessageWithText]);
 
   const handleSendMessage = async () => {
+    // Block if already sending
+    if (sending || sendingQueueRef.current) {
+      console.log('⚠️ Agent: Message send blocked - already sending');
+      return;
+    }
+
     // Priority 1: Check for image upload
     if (selectedImage) {
       setSending(true);
+      sendingQueueRef.current = true;
       try {
         const result = await uploadImage({
           conversationId: activeCase.conversation.id,
@@ -401,21 +441,26 @@ export default function AgentChatInterface({
           setInputValue('');
           handleCancelImage();
         }
+
+        // Wait a bit to ensure message is processed
+        await new Promise((resolve) => setTimeout(resolve, 300));
       } catch (error) {
         console.error('Error enviando imagen:', error);
         alert('Error al enviar imagen. Intenta nuevamente.');
       } finally {
         setSending(false);
+        sendingQueueRef.current = false;
       }
       return; // Exit early - image sent
     }
 
     // Priority 2: Normal text message
-    if (!inputValue.trim() || sending) return;
+    if (!inputValue.trim()) return;
 
     const messageContent = inputValue.trim();
     setInputValue('');
     setSending(true);
+    sendingQueueRef.current = true;
 
     try {
       // Use WebSocket if connected, otherwise fall back to HTTP
@@ -466,11 +511,15 @@ export default function AgentChatInterface({
           return [...prev, newMessage];
         });
       }
+
+      // Wait a bit to ensure message is processed
+      await new Promise((resolve) => setTimeout(resolve, 300));
     } catch (error) {
       console.error('Error enviando mensaje:', error);
       setInputValue(messageContent); // Restaurar mensaje si falla
     } finally {
       setSending(false);
+      sendingQueueRef.current = false;
     }
   };
 
@@ -478,9 +527,12 @@ export default function AgentChatInterface({
     setResolving(true);
     try {
       await onResolve(activeCase.request.id);
-      onRefresh();
+      // onResolve already calls fetchRequests internally, no need to call onRefresh
     } catch (error) {
       console.error('Error resolviendo caso:', error);
+      alert(
+        'Hubo un error al resolver el caso. Por favor, intenta nuevamente.'
+      );
     } finally {
       setResolving(false);
     }
@@ -810,18 +862,18 @@ export default function AgentChatInterface({
           </div>
 
           <input
+            ref={inputRef}
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
             placeholder="Escribe tu mensaje o usa el micrófono..."
-            disabled={sending}
-            className="w-full pl-24 pr-14 py-3 border-2 border-gray-200 rounded-full focus:outline-none focus:border-primary transition-colors text-dark disabled:bg-gray-100"
+            className="w-full pl-24 pr-14 py-3 border-2 border-gray-200 rounded-full focus:outline-none focus:border-primary transition-colors text-dark"
           />
           <button
             onClick={handleSendMessage}
-            disabled={!inputValue.trim() || sending}
-            className="absolute right-3 p-2.5 rounded-full transition-colors bg-primary text-white hover:bg-secondary"
+            disabled={!inputValue.trim() || sending || sendingQueueRef.current}
+            className="absolute right-3 p-2.5 rounded-full transition-colors bg-primary text-white hover:bg-secondary disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
             <Send size={20} />
           </button>

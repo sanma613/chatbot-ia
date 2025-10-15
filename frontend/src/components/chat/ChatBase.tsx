@@ -37,6 +37,9 @@ export default function ChatBase({
   agentView = false, // 🔹 NUEVO: default false (vista estudiante)
 }: ChatBaseProps) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  // Track if this is the first render to do instant scroll (same as agent)
+  const isFirstRenderRef = useRef(true);
+  const prevMessagesLengthRef = useRef(0); // 🟢 NUEVO: Trackear cantidad anterior
 
   // 🔹 DEBUG: Log todos los mensajes que llegan a ChatBase
   useEffect(() => {
@@ -54,40 +57,50 @@ export default function ChatBase({
     });
   }, [messages]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (instant = false) => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: instant ? 'auto' : 'smooth',
+    });
   };
 
+  // 🟢 Scroll inicial (solo primera vez)
   useEffect(() => {
-    // Find the actual scroll container (may be parent or ancestor)
-    let chatContainer = messagesEndRef.current?.parentElement;
-
-    // Search up the DOM tree for element with overflow-y-auto or overflow-auto
-    while (chatContainer) {
-      const overflowY = window.getComputedStyle(chatContainer).overflowY;
-      if (overflowY === 'auto' || overflowY === 'scroll') {
-        break; // Found the scroll container
-      }
-      chatContainer = chatContainer.parentElement;
+    if (isFirstRenderRef.current && messages.length > 0) {
+      setTimeout(() => {
+        scrollToBottom(true); // Instant scroll
+        isFirstRenderRef.current = false;
+        prevMessagesLengthRef.current = messages.length;
+      }, 100);
     }
+  }, [messages.length]);
 
-    if (!chatContainer) {
-      // Si no hay contenedor con scroll, hacer scroll normal
-      scrollToBottom();
+  // 🟢 Auto-scroll para mensajes nuevos (solo si está cerca del fondo)
+  useEffect(() => {
+    // Skip si es primera carga
+    if (isFirstRenderRef.current) return;
+
+    // Skip si no hay mensajes nuevos
+    if (messages.length <= prevMessagesLengthRef.current) {
+      prevMessagesLengthRef.current = messages.length;
       return;
     }
 
-    // Verificar si el usuario está cerca del fondo (150px de margen)
+    prevMessagesLengthRef.current = messages.length;
+
+    const chatContainer = messagesEndRef.current?.parentElement;
+    if (!chatContainer) return;
+
+    // Check if user is near bottom (within 150px)
     const isNearBottom =
       chatContainer.scrollHeight -
-        chatContainer.scrollTop -
-        chatContainer.clientHeight <
+      chatContainer.scrollTop -
+      chatContainer.clientHeight -
       150;
 
-    // Solo hacer scroll si está cerca del fondo
+    // Only auto-scroll if user is near bottom
     if (isNearBottom) {
       setTimeout(() => {
-        scrollToBottom();
+        scrollToBottom(false); // Smooth scroll
       }, 50);
     }
   }, [messages]);

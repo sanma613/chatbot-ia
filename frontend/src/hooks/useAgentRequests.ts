@@ -20,10 +20,23 @@ export function useAgentRequests() {
     try {
       setLoading(true);
       setError(null);
+
+      // Fetch requests and active case separately to handle errors independently
+      const requestsPromise = getAgentRequests().catch((err) => {
+        console.error('Error fetching requests:', err);
+        return []; // Return empty array if requests fail
+      });
+
+      const activeCasePromise = getActiveCase().catch((err) => {
+        console.error('Error fetching active case:', err);
+        return null; // Return null if active case fetch fails
+      });
+
       const [requestsData, activeCaseData] = await Promise.all([
-        getAgentRequests(),
-        getActiveCase(),
+        requestsPromise,
+        activeCasePromise,
       ]);
+
       setRequests(requestsData);
       setActiveCase(activeCaseData);
     } catch (err) {
@@ -57,6 +70,8 @@ export function useAgentRequests() {
     async (requestId: string) => {
       try {
         await resolveRequest(requestId);
+        // Small delay to allow backend to update state before refetching
+        await new Promise((resolve) => setTimeout(resolve, 500));
         await fetchRequests(); // Recargar datos
       } catch (err) {
         console.error('Error resolving request:', err);

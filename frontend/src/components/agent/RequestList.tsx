@@ -116,8 +116,10 @@ export default function RequestList({
             <div className="flex items-center gap-1">
               <MessageSquare className="w-4 h-4" />
               <span>
-                {request.message_count || 0} mensaje
-                {(request.message_count || 0) !== 1 ? 's' : ''}
+                {request.message_count ? request.message_count + 1 : 0} mensaje
+                {(request.message_count ? request.message_count + 1 : 0) !== 1
+                  ? 's'
+                  : ''}
               </span>
             </div>
           </div>

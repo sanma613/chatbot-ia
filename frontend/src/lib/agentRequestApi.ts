@@ -21,7 +21,17 @@ export async function getAgentRequests(): Promise<AgentRequest[]> {
     });
 
     if (!response.ok) {
-      throw new Error('Error al obtener solicitudes');
+      let errorMsg = 'Error al obtener solicitudes';
+      try {
+        const errorData = await response.json();
+        errorMsg = errorData.detail || errorMsg;
+      } catch {
+        // Si no se puede parsear el JSON, usar mensaje por defecto
+      }
+      console.error(
+        `getAgentRequests failed: ${response.status} - ${errorMsg}`
+      );
+      throw new Error(errorMsg);
     }
 
     const data = await response.json();
@@ -48,7 +58,15 @@ export async function getActiveCase(): Promise<AgentActiveCase | null> {
     }
 
     if (!response.ok) {
-      throw new Error('Error al obtener caso activo');
+      let errorMsg = 'Error al obtener caso activo';
+      try {
+        const errorData = await response.json();
+        errorMsg = errorData.detail || errorMsg;
+      } catch {
+        // Si no se puede parsear el JSON, usar mensaje por defecto
+      }
+      console.error(`getActiveCase failed: ${response.status} - ${errorMsg}`);
+      throw new Error(errorMsg);
     }
 
     const data = await response.json();

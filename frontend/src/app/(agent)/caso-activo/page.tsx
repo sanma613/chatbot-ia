@@ -66,10 +66,6 @@ export default function CasoActivoPage() {
   }
 
   return (
-    <AgentChatInterface
-      activeCase={activeCase}
-      onResolve={resolveRequest}
-      onRefresh={refetch}
-    />
+    <AgentChatInterface activeCase={activeCase} onResolve={resolveRequest} />
   );
 }

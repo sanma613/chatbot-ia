@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Mic, MicOff, Paperclip, Send, X } from 'lucide-react';
 import removeMarkdown from 'remove-markdown';
+import { useRouter } from 'next/navigation';
 import { useUser } from '@/hooks/useUser';
 import { cn } from '@/lib/Utils';
 import ChatBase from './chat/ChatBase';
@@ -87,6 +88,7 @@ export default function ChatInterface({
   }, [initialMessages]);
 
   const { user, loading } = useUser();
+  const router = useRouter();
   const [inputValue, setInputValue] = useState('');
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [messageRatings, setMessageRatings] = useState<
@@ -97,10 +99,29 @@ export default function ChatInterface({
   const [blocked, setBlocked] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeechSupported, setIsSpeechSupported] = useState(true);
-  const [voiceMode, setVoiceMode] = useState(false);
+
+  // 🔹 Recuperar estado de voz desde localStorage al iniciar
+  const [voiceMode, setVoiceMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('voiceMode');
+      return saved === 'true';
+    }
+    return false;
+  });
+
   const inputRef = useRef<HTMLInputElement | null>(null);
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
-  const [speakResponses, setSpeakResponses] = useState(false);
+  const transcriptAccumulatorRef = useRef<string>(''); // Acumular transcripción completa
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null); // Timer para detectar silencio
+
+  // 🔹 Recuperar estado de speakResponses desde localStorage
+  const [speakResponses, setSpeakResponses] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('speakResponses');
+      return saved === 'true';
+    }
+    return false;
+  });
   // Conversation tracking
   const [conversationId, setConversationId] = useState<string | undefined>(
     propConversationId
@@ -134,6 +155,8 @@ export default function ChatInterface({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { uploadImage, uploading: uploadingImage } = useImageUpload();
+  // Message sending queue control - prevent multiple simultaneous sends
+  const sendingQueueRef = useRef(false);
 
   // Helper function to create welcome message with FAQs (with fixed timestamp)
   const createWelcomeMessage = useCallback(
@@ -271,17 +294,63 @@ export default function ChatInterface({
     }
   }, [escalationStatus]);
 
+  // Persist voiceMode state to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('voiceMode', String(voiceMode));
+    }
+  }, [voiceMode]);
+
+  // Persist speakResponses state to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('speakResponses', String(speakResponses));
+    }
+  }, [speakResponses]);
+
+  // Restart recognition if voiceMode was active before redirect
+  useEffect(() => {
+    if (
+      voiceMode &&
+      recognitionRef.current &&
+      !isRecording &&
+      !blockedRef.current &&
+      !hasActiveAgentRef.current
+    ) {
+      // Wait for recognition to be fully initialized
+      const timer = setTimeout(() => {
+        try {
+          recognitionRef.current?.start();
+          console.log(
+            '🔄 Reiniciando reconocimiento después de redirect (voiceMode activo)'
+          );
+        } catch (e) {
+          console.warn(
+            'No se pudo reiniciar reconocimiento después de redirect:',
+            e
+          );
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [voiceMode, isRecording]);
+
   // Check if agent is actively chatting (for WebSocket)
   const hasActiveAgent =
     escalationStatus?.is_escalated &&
     escalationStatus?.agent_request?.status === 'in_progress';
 
-  // Autofocus input after cooldown ends
+  // Autofocus input - always keep focus except in voice mode
   useEffect(() => {
-    if (!isWaitingForResponse && !blocked && !voiceMode && inputRef.current) {
+    if (
+      !voiceMode &&
+      inputRef.current &&
+      document.activeElement !== inputRef.current
+    ) {
+      // Only focus if not already focused to avoid interrupting user typing
       inputRef.current.focus();
     }
-  }, [isWaitingForResponse, blocked, voiceMode]);
+  }, [voiceMode, messages]); // Re-focus after new messages
 
   // TTS helper: uses SpeechSynthesis and restarts recognition when finished
   const speakText = useCallback((text: string) => {
@@ -319,18 +388,46 @@ export default function ChatInterface({
       utter.onend = () => {
         // TTS finished
         ttsPlayingRef.current = false;
+        console.log(
+          '🔊 TTS finalizado - preparando para reiniciar reconocimiento',
+          {
+            voiceMode: voiceModeRef.current,
+            speakResponses: speakResponsesRef.current,
+            blocked: blockedRef.current,
+            waitingForResponse: waitingForResponseRef.current,
+          }
+        );
+
         // After speaking, if voice mode still active and not blocked, restart recognition
         setTimeout(() => {
           if (
             voiceModeRef.current &&
             speakResponsesRef.current &&
-            !blockedRef.current
+            !blockedRef.current &&
+            !waitingForResponseRef.current // Asegurar que no estamos esperando otra respuesta
           ) {
             try {
+              console.log('🔄 Reiniciando reconocimiento después de TTS');
+              // Limpiar acumulador antes de reiniciar
+              transcriptAccumulatorRef.current = '';
               recognitionRef.current?.start();
-            } catch {
-              // some browsers throw if start called too quickly; ignore
+            } catch (e) {
+              console.warn(
+                '⚠️ Error al reiniciar reconocimiento después de TTS:',
+                e
+              );
+              // Si falla por estar ya iniciado, ignorar
+              if (e instanceof Error && !e.message.includes('already')) {
+                console.error('Error crítico al reiniciar:', e);
+              }
             }
+          } else {
+            console.log('❌ No se reinició reconocimiento:', {
+              voiceMode: voiceModeRef.current,
+              speakResponses: speakResponsesRef.current,
+              blocked: blockedRef.current,
+              waitingForResponse: waitingForResponseRef.current,
+            });
           }
         }, 250);
       };
@@ -418,6 +515,9 @@ export default function ChatInterface({
           if (data.conversation_id && !conversationId) {
             setConversationId(data.conversation_id);
             localStorage.setItem('currentConversationId', data.conversation_id);
+
+            // 🔹 Redirigir a la conversación creada
+            router.push(`/chat/${data.conversation_id}`);
 
             // If it was first message, fetch full conversation to get all messages
             if (isFirstMessage) {
@@ -522,6 +622,7 @@ export default function ChatInterface({
       questions,
       escalationStatus?.is_escalated,
       escalationStatus?.agent_request?.status,
+      router,
     ]
   );
 
@@ -551,6 +652,9 @@ export default function ChatInterface({
             'currentConversationId',
             conversationData.conversation.id
           );
+
+          // 🔹 Redirigir a la conversación creada
+          router.push(`/chat/${conversationData.conversation.id}`);
 
           // Convert messages to UI format
           const convertedMessages: Message[] = conversationData.messages.map(
@@ -696,19 +800,47 @@ export default function ChatInterface({
       questions,
       escalationStatus?.is_escalated,
       escalationStatus?.agent_request?.status,
+      router,
     ]
   );
   // 🔹 Manejo del envío de mensajes (texto) - usa las funciones memoizadas
   const handleSendMessageWithText = useCallback(
     (text: string) => {
+      // Prevent sending if queue is blocked
+      if (sendingQueueRef.current) {
+        console.log('⚠️ Student: Message send blocked - already sending');
+        return;
+      }
+
+      // 🔹 BLOQUEO: Si el caso está resuelto, no permitir envío
+      if (escalationStatus?.agent_request?.status === 'resolved') {
+        console.log('⚠️ Caso resuelto - no se pueden enviar mensajes');
+        return;
+      }
+
       // Check if agent is actively chatting (no cooldown needed)
       const hasActiveAgent =
         escalationStatus?.is_escalated &&
         escalationStatus?.agent_request?.status === 'in_progress';
 
-      // If there's an active agent, don't apply cooldown check
-      if (text.trim() === '' || blocked) return;
+      // 🔹 BLOQUEO: Si está escalado pero agente NO activo (pending), no permitir envío
+      const isEscalatedPending =
+        escalationStatus?.is_escalated &&
+        escalationStatus?.agent_request?.status === 'pending';
+
+      if (text.trim() === '' || blocked || isEscalatedPending) {
+        if (isEscalatedPending) {
+          console.log(
+            '⏳ Chat escalado pendiente - esperando que agente tome el caso'
+          );
+        }
+        return;
+      }
+
       if (!hasActiveAgent && isWaitingForResponse) return;
+
+      // Block queue
+      sendingQueueRef.current = true;
 
       const newMessage: Message = {
         id: Date.now(),
@@ -734,45 +866,53 @@ export default function ChatInterface({
 
       const trimmed = text.trim().toLowerCase();
 
-      // ✅ REMOVED: Local "agente" detection - let backend handle escalation
-      // Now the message will be sent to backend, which will detect and escalate properly
+      // 🔹 Si el chat está escalado (pendiente o con agente activo), solo permitir chat con agente
+      const isEscalated = escalationStatus?.is_escalated || false;
 
-      const selectedNumber = parseInt(trimmed, 10);
-
-      // Only apply cooldown if there's NO active agent
-      if (!hasActiveAgent) {
-        waitingForResponseRef.current = true;
-        setIsWaitingForResponse(true);
-      }
-
-      if (
-        !isNaN(selectedNumber) &&
-        selectedNumber > 0 &&
-        selectedNumber <= questions.length
-      ) {
-        const selectedQuestion = questions[selectedNumber - 1];
-        sendFaqToBackend(selectedQuestion.id);
-      } else {
-        // Check if we should use WebSocket or HTTP
+      if (isEscalated) {
+        // Chat escalado - solo comunicación con agente (no FAQs, no chatbot IA)
         if (hasActiveAgent && wsConnected) {
-          // Send via WebSocket for real-time chat with agent
+          // Agente activo - enviar por WebSocket
           const sent = wsSendMessage(text);
           if (sent) {
-            console.log('📤 Message sent via WebSocket');
-            // Message will be saved by backend and broadcasted
+            console.log('📤 Message sent to agent via WebSocket');
           } else {
-            console.error(
-              '❌ Failed to send via WebSocket, falling back to HTTP'
-            );
-            sendToAcademicChatbot(text);
+            console.error('❌ Failed to send via WebSocket');
+            // No fallback to chatbot - chat is escalated
           }
         } else {
-          // Normal chatbot flow
+          // Escalado pero agente no activo (pendiente)
+          console.log('⏳ Chat escalated - waiting for agent to take case');
+          // Message already added to UI, but won't be sent until agent takes case
+        }
+      } else {
+        // Chat NO escalado - comportamiento normal (FAQs y chatbot IA)
+        const selectedNumber = parseInt(trimmed, 10);
+
+        // Only apply cooldown if there's NO active agent
+        waitingForResponseRef.current = true;
+        setIsWaitingForResponse(true);
+
+        if (
+          !isNaN(selectedNumber) &&
+          selectedNumber > 0 &&
+          selectedNumber <= questions.length
+        ) {
+          // Usuario seleccionó una FAQ por número
+          const selectedQuestion = questions[selectedNumber - 1];
+          sendFaqToBackend(selectedQuestion.id);
+        } else {
+          // Mensaje normal al chatbot IA
           sendToAcademicChatbot(text);
         }
       }
 
       setInputValue('');
+
+      // Unblock queue after a short delay to ensure message is processed
+      setTimeout(() => {
+        sendingQueueRef.current = false;
+      }, 300);
     },
     [
       blocked,
@@ -799,12 +939,18 @@ export default function ChatInterface({
 
       if (SpeechRecognition) {
         const recognition = new SpeechRecognition();
-        recognition.continuous = false; // Solo escucha una vez
-        recognition.interimResults = false; // Solo resultados finales
+        recognition.continuous = false; // Detección automática de fin de habla
+        recognition.interimResults = true; // Captar resultados intermedios para acumular
         recognition.lang = 'es-ES'; // Español
 
         recognition.onstart = () => {
           setIsRecording(true);
+          transcriptAccumulatorRef.current = ''; // Limpiar acumulador al iniciar
+          // Limpiar timer de silencio previo
+          if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current);
+            silenceTimerRef.current = null;
+          }
           console.log('✅ Recognition started', {
             hasActiveAgent: hasActiveAgentRef.current,
           });
@@ -812,6 +958,13 @@ export default function ChatInterface({
 
         recognition.onend = () => {
           setIsRecording(false);
+
+          // Limpiar timer de silencio al finalizar grabación
+          if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current);
+            silenceTimerRef.current = null;
+          }
+
           console.log('🎤 Grabación finalizada', {
             hasActiveAgent: hasActiveAgentRef.current,
           });
@@ -842,10 +995,14 @@ export default function ChatInterface({
 
         recognition.onerror = (event: unknown) => {
           const ev = event as { error?: string } | undefined;
-          // If the error is 'aborted' it's likely from our own recognitionRef.current.abort()
-          // (we abort before TTS or when stopping voiceMode). Ignore that to avoid noisy logs.
-          if (ev?.error === 'aborted') {
+
+          // Ignorar errores que son normales con continuous mode
+          if (ev?.error === 'aborted' || ev?.error === 'no-speech') {
             setIsRecording(false);
+            // 'no-speech' es normal con continuous=true, solo significa que no detectó voz por un momento
+            if (ev?.error === 'no-speech') {
+              console.log('ℹ️ No se detectó voz (normal en modo continuo)');
+            }
             return;
           }
 
@@ -884,40 +1041,71 @@ export default function ChatInterface({
           }
         };
         recognition.onresult = async (event: unknown) => {
-          const ev = event as
-            | {
-                results?: {
-                  [index: number]: { [index: number]: { transcript?: string } };
-                };
-              }
-            | undefined;
-          const transcript = ev?.results?.[0]?.[0]?.transcript ?? '';
-          console.log('📝 Transcripción recibida:', transcript, {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const ev = event as any; // SpeechRecognition event
+
+          if (!ev?.results) return;
+
+          // 🔹 Acumular TODAS las transcripciones (intermedias y finales)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const results = Array.from(ev.results) as any[];
+
+          // Construir el texto completo: resultados finales acumulados + último resultado (puede ser intermedio)
+          let fullTranscript = '';
+
+          for (let i = 0; i < results.length; i++) {
+            const result = results[i];
+            fullTranscript += result[0].transcript;
+          }
+
+          const lastResult = results[results.length - 1];
+          const isFinal = lastResult.isFinal as boolean;
+
+          console.log('📝 Transcripción:', {
+            fullTranscript,
+            isFinal,
             hasActiveAgent: hasActiveAgentRef.current,
           });
 
-          // Actualizar input con el texto transcrito
-          setInputValue(transcript);
+          // Actualizar input con el texto acumulado (incluso si es intermedio)
+          setInputValue(fullTranscript);
 
-          // 🔹 Si hay agente activo, enviar inmediatamente SIN cooldown
-          if (hasActiveAgentRef.current) {
-            console.log('� Enviando mensaje en modo agente (sin cooldown)');
-            setTimeout(() => {
-              handleSendMessageWithText(transcript);
-            }, 300); // Reducido a 300ms para mejor UX
-            return;
-          }
+          // 🔹 Si es resultado FINAL, enviar el mensaje
+          if (isFinal && fullTranscript.trim()) {
+            const finalTranscript = fullTranscript.trim();
 
-          // 🔹 Comportamiento original (con cooldown para bot)
-          setTimeout(() => {
-            // mark that we're waiting for the chatbot's response so the mic doesn't restart
-            try {
-              waitingForResponseRef.current = true;
-            } catch {
-              // ignore
+            console.log('✅ Resultado final detectado - enviando mensaje');
+
+            // Limpiar el acumulador y el input
+            transcriptAccumulatorRef.current = '';
+            setInputValue('');
+
+            // Limpiar cualquier timer pendiente
+            if (silenceTimerRef.current) {
+              clearTimeout(silenceTimerRef.current);
+              silenceTimerRef.current = null;
             }
-            handleSendMessageWithText(transcript);
-          }, 500);
+
+            // 🔹 Si hay agente activo, enviar inmediatamente SIN cooldown
+            if (hasActiveAgentRef.current) {
+              console.log('📤 Enviando mensaje en modo agente (sin cooldown)');
+              setTimeout(() => {
+                handleSendMessageWithText(finalTranscript);
+              }, 100);
+              return;
+            }
+
+            // 🔹 Comportamiento original (con cooldown para bot)
+            setTimeout(() => {
+              try {
+                waitingForResponseRef.current = true;
+              } catch {
+                // ignore
+              }
+              handleSendMessageWithText(finalTranscript);
+            }, 300);
+          }
+          // Si no es final, solo mostrar el texto intermedio en el input
         };
 
         recognitionRef.current = recognition;
@@ -1164,12 +1352,19 @@ export default function ChatInterface({
 
   // 🔹 Manejo del envío de mensajes
   const handleSendMessage = async () => {
+    // Prevent sending if queue is blocked
+    if (sendingQueueRef.current) {
+      console.log('⚠️ Student: Message send blocked - already sending');
+      return;
+    }
+
     const hasActiveAgent =
       escalationStatus?.is_escalated &&
       escalationStatus?.agent_request?.status === 'in_progress';
 
     // Si hay imagen seleccionada, enviar con imagen
     if (selectedImage && conversationId) {
+      sendingQueueRef.current = true;
       try {
         const result = await uploadImage({
           conversationId,
@@ -1205,9 +1400,14 @@ export default function ChatInterface({
             console.log('📤 Imagen enviada y guardada en BD');
           }
         }
+
+        // Wait a bit to ensure message is processed
+        await new Promise((resolve) => setTimeout(resolve, 300));
       } catch (error) {
         console.error('Error enviando imagen:', error);
         alert('Error al enviar imagen. Intenta nuevamente.');
+      } finally {
+        sendingQueueRef.current = false;
       }
       return;
     }
@@ -1293,12 +1493,14 @@ export default function ChatInterface({
             <p className="text-dark text-sm">Cargando conversación...</p>
           </div>
         ) : (
-          <ChatBase
-            messages={messages}
-            messageRatings={messageRatings}
-            onRateMessage={handleRateMessage}
-            readonly={false}
-          />
+          <>
+            <ChatBase
+              messages={messages}
+              messageRatings={messageRatings}
+              onRateMessage={handleRateMessage}
+              readonly={false}
+            />
+          </>
         )}
       </div>
 
@@ -1418,43 +1620,42 @@ export default function ChatInterface({
             ref={inputRef}
             type="text"
             placeholder={
-              isWaitingForResponse && !hasActiveAgent
-                ? 'Esperando respuesta...'
-                : isCreatingConversation
-                  ? 'Creando conversación...'
-                  : blocked
-                    ? 'Chat bloqueado: estás en espera de un agente humano...'
-                    : 'Escribe tu mensaje o usa el micrófono...'
+              escalationStatus?.agent_request?.status === 'resolved'
+                ? 'Tu caso ha sido resuelto. Gracias por contactarnos.'
+                : isWaitingForResponse && !hasActiveAgent
+                  ? 'Esperando respuesta...'
+                  : isCreatingConversation
+                    ? 'Creando conversación...'
+                    : blocked
+                      ? 'Chat bloqueado: estás en espera de un agente humano...'
+                      : hasActiveAgent
+                        ? 'Chateando con un agente humano...'
+                        : escalationStatus?.is_escalated
+                          ? 'Esperando que un agente tome tu caso...'
+                          : 'Escribe tu mensaje o usa el micrófono...'
             }
             className="w-full pl-24 pr-14 py-3 border-2 border-gray-200 rounded-full focus:outline-none focus:border-primary transition-colors text-dark"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyPress}
-            disabled={
-              blocked ||
-              (isRecording && !hasActiveAgent) || // Solo bloquear si graba en modo bot
-              (voiceMode && !hasActiveAgent) || // Solo bloquear modo voz si no hay agente
-              isCreatingConversation ||
-              (isWaitingForResponse && !hasActiveAgent) // Solo aplicar cooldown sin agente
-            }
           />
 
           <button
             className={cn(
               'absolute right-3 p-2.5 rounded-full transition-colors',
-              blocked ||
-                isRecording ||
+              escalationStatus?.agent_request?.status === 'resolved' ||
                 isCreatingConversation ||
-                isWaitingForResponse
+                (isWaitingForResponse && !hasActiveAgent) ||
+                sendingQueueRef.current
                 ? 'bg-gray-300 text-white cursor-not-allowed'
                 : 'bg-primary text-white hover:bg-secondary'
             )}
             onClick={handleSendMessage}
             disabled={
-              blocked ||
-              isRecording ||
+              escalationStatus?.agent_request?.status === 'resolved' ||
               isCreatingConversation ||
-              isWaitingForResponse
+              (isWaitingForResponse && !hasActiveAgent) ||
+              sendingQueueRef.current
             }
           >
             <Send size={20} />
