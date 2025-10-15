@@ -1,5 +1,5 @@
 'use client';
-import React from 'react';
+import React, { Suspense } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useState } from 'react';
@@ -13,7 +13,7 @@ interface FormData {
   password: string;
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const [formData, setFormData] = useState<FormData>({
     email: '',
     password: '',
@@ -177,5 +177,19 @@ export default function LoginPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-light">
+          <div className="text-center">Cargando...</div>
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }
