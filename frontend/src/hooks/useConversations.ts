@@ -12,17 +12,30 @@ interface UseConversationsReturn {
 
 /**
  * Convert API conversation format to frontend format for list view
+ * Returns null if conversation data is invalid
  */
-function convertApiConversation(apiConv: ApiConversation): Conversation {
-  return {
-    id: apiConv.id,
-    title: apiConv.title || 'Nueva conversación',
-    createdAt: new Date(apiConv.created_at),
-    updatedAt: new Date(apiConv.updated_at),
-    messageCount: apiConv.message_count || 0,
-    lastMessage: apiConv.last_message || undefined,
-    messages: [],
-  };
+function convertApiConversation(apiConv: ApiConversation): Conversation | null {
+  // Validar que tenga los campos críticos
+  if (!apiConv || !apiConv.id) {
+    console.warn('Invalid conversation data - missing id:', apiConv);
+    return null;
+  }
+
+  try {
+    return {
+      id: apiConv.id,
+      title: apiConv.title || 'Nueva conversación',
+      createdAt: apiConv.created_at ? new Date(apiConv.created_at) : new Date(),
+      updatedAt: apiConv.updated_at ? new Date(apiConv.updated_at) : new Date(),
+      messageCount:
+        typeof apiConv.message_count === 'number' ? apiConv.message_count : 0,
+      lastMessage: apiConv.last_message || undefined,
+      messages: [],
+    };
+  } catch (error) {
+    console.error('Error converting conversation:', error, apiConv);
+    return null;
+  }
 }
 
 /**
@@ -41,8 +54,10 @@ export function useConversations(): UseConversationsReturn {
       const data = await getUserConversations();
 
       // Convert and sort conversations by most recent
+      // Filter out any null/invalid conversations
       const converted = data.conversations
         .map(convertApiConversation)
+        .filter((conv): conv is Conversation => conv !== null)
         .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 
       setConversations(converted);

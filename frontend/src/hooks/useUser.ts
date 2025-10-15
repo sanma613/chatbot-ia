@@ -3,8 +3,15 @@
 
 import { useEffect, useState } from 'react';
 
+export interface User {
+  id: string;
+  email: string;
+  full_name: string;
+  role: 'user' | 'agent' | 'admin';
+}
+
 export const useUser = () => {
-  const [user, setUser] = useState<{ full_name: string } | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

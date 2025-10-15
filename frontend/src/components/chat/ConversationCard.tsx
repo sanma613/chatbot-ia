@@ -15,6 +15,8 @@ import {
   updateConversationTitle,
   deleteConversation,
 } from '@/lib/conversationApi';
+import { useEscalationStatus } from '@/hooks/useEscalationStatus';
+import EscalationBadge from './EscalationBadge';
 
 interface ConversationCardProps {
   conversation: Conversation;
@@ -31,6 +33,17 @@ export default function ConversationCard({
   const [editedTitle, setEditedTitle] = useState(conversation.title);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Obtener estado de escalamiento (hooks deben ir antes de cualquier return)
+  // Usamos el ID o un string vacío para evitar errores
+  const conversationId = conversation?.id || '';
+  const { status: escalationStatus } = useEscalationStatus(conversationId);
+
+  // Validar que la conversación tenga la información necesaria
+  if (!conversation || !conversation.id || !conversation.title) {
+    console.warn('ConversationCard: Invalid conversation data', conversation);
+    return null; // No renderizar si falta info crítica
+  }
 
   // Formatear fecha para mostrar
   const formatDate = (date: Date) => {
@@ -194,7 +207,7 @@ export default function ConversationCard({
           </div>
 
           {/* Último mensaje */}
-          {conversation.lastMessage && (
+          {conversation.lastMessage && conversation.lastMessage.trim() && (
             <Link href={`/chat/${conversation.id}`} className="block">
               <p className="text-dark text-sm mb-3 line-clamp-2 cursor-pointer">
                 {conversation.lastMessage}
@@ -206,13 +219,24 @@ export default function ConversationCard({
           <div className="flex items-center gap-4 text-sm text-dark">
             <div className="flex items-center gap-1">
               <Calendar className="w-4 h-4" />
-              {formatDate(conversation.updatedAt)}
+              {conversation.updatedAt
+                ? formatDate(conversation.updatedAt)
+                : 'Fecha desconocida'}
             </div>
             <div className="flex items-center gap-1">
               <MessageSquare className="w-4 h-4" />
-              {(conversation.messageCount || 0) + 1} mensajes
+              {typeof conversation.messageCount === 'number'
+                ? `${conversation.messageCount + 1} mensajes`
+                : 'Sin mensajes'}
             </div>
           </div>
+
+          {/* Badge de estado de escalamiento */}
+          {escalationStatus && (
+            <div className="mt-2">
+              <EscalationBadge status={escalationStatus} />
+            </div>
+          )}
         </div>
 
         {/* Icono de navegación */}

@@ -6,6 +6,7 @@ export interface Message {
   role: 'user' | 'assistant';
   timestamp: Date;
   rating?: 'up' | 'down' | null;
+  image_url?: string; // 🔹 URL de imagen adjunta desde BD
 }
 
 export interface Conversation {

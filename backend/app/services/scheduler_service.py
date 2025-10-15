@@ -15,6 +15,14 @@ from app.core.config import supabase_
 logger = logging.getLogger(__name__)
 
 
+def get_utc_timestamp() -> str:
+    """
+    Obtener timestamp UTC en formato compatible con Supabase.
+    Supabase espera formato ISO sin timezone explícito (naive UTC).
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+
+
 class ReminderScheduler:
     """Scheduler for sending activity reminders"""
 
@@ -376,7 +384,7 @@ class ReminderScheduler:
             # Add email_sent field if it exists in the schema
             try:
                 notification_data["email_sent"] = True
-                notification_data["email_sent_at"] = datetime.now().isoformat()
+                notification_data["email_sent_at"] = get_utc_timestamp()
             except:
                 pass  # Columns might not exist yet
 

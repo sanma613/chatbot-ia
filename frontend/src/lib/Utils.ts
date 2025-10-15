@@ -47,3 +47,16 @@ export function getMinutesSince(utcString: string): number {
   const now = new Date();
   return Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
 }
+
+/**
+ * Obtiene la fecha actual en hora local del navegador en formato YYYY-MM-DD
+ * SIN conversión a UTC (evita problemas de zona horaria)
+ * @param date - Objeto Date opcional (default: fecha actual)
+ * @returns String en formato YYYY-MM-DD (ej: "2025-10-13")
+ */
+export function getLocalDateString(date: Date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}

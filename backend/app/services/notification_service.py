@@ -5,9 +5,17 @@ Handles business logic for notification management with Supabase
 
 import logging
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
+
+
+def get_utc_timestamp() -> str:
+    """
+    Obtener timestamp UTC en formato compatible con Supabase.
+    Supabase espera formato ISO sin timezone explícito (naive UTC).
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
 
 class NotificationService:
@@ -362,7 +370,7 @@ class NotificationService:
             # Mark activity as completed
             activity_updates = {
                 "is_completed": True,
-                "completed_at": datetime.utcnow().isoformat(),
+                "completed_at": get_utc_timestamp(),
             }
 
             activity_response = (

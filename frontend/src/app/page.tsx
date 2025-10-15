@@ -1,10 +1,54 @@
 'use client';
-import React from 'react';
+import React, { useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import Ballpit from '@/components/Ballpit';
+import { useUser } from '@/hooks/useUser';
 
 export default function LandingPage() {
+  const { user, loading } = useUser();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (loading) return;
+
+    // Si ya hay un usuario autenticado, redirigir según su rol
+    if (user) {
+      switch (user.role) {
+        case 'user':
+          router.push('/chat');
+          break;
+        case 'agent':
+          router.push('/caso-activo');
+          break;
+        case 'admin':
+          router.push('/escalate');
+          break;
+        default:
+          break;
+      }
+    }
+  }, [user, loading, router]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Si ya está autenticado, mostrar loading mientras redirige
+  if (user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <span className="ml-3 text-lg text-gray-700">Redirigiendo...</span>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-light">
       {/* Header */}

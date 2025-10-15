@@ -43,6 +43,21 @@ def get_current_user(access_token: Optional[str] = Cookie(default=None)) -> Any:
     return user
 
 
+async def get_current_user_ws(token: Optional[str] = None) -> Any:
+    """Obtener usuario autenticado para WebSocket (token opcional)"""
+    if not token:
+        # WebSocket sin autenticación - permitir conexión anónima por ahora
+        # En producción, considera requerir autenticación
+        return None
+
+    try:
+        user = get_user_from_token(token)
+        return user
+    except Exception:
+        # Si el token es inválido, permitir conexión anónima
+        return None
+
+
 # --- Routes --- #
 @router.get("/me", response_model=MeResponse)
 def get_me(user: Any = Depends(get_current_user)) -> Dict[str, Any]:

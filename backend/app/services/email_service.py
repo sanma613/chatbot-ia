@@ -243,6 +243,171 @@ Este es un correo automático, por favor no respondas a este mensaje.
             logger.error(f"Unexpected error sending email to {to_email}: {str(e)}")
             return False
 
+    def send_agent_assignment_notification(
+        self, to_email: str, user_name: str, agent_name: str, conversation_id: str
+    ) -> bool:
+        """
+        Send email notification when an agent takes their support case
+
+        Args:
+            to_email: Student email address
+            user_name: Student's name
+            agent_name: Agent's name who took the case
+            conversation_id: ID of the conversation
+
+        Returns:
+            True if email sent successfully
+        """
+        try:
+            subject = f"✅ Tu solicitud de soporte ha sido asignada"
+
+            # Build conversation URL - Direct link to the specific conversation
+            frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+            conversation_url = f"{frontend_url}/chat/{conversation_id}"
+
+            html_body = f"""
+            <html>
+                <head>
+                    <style>
+                        body {{
+                            font-family: Arial, sans-serif;
+                            line-height: 1.6;
+                            color: #333;
+                        }}
+                        .container {{
+                            max-width: 600px;
+                            margin: 0 auto;
+                            padding: 20px;
+                            background-color: #f9f9f9;
+                        }}
+                        .card {{
+                            background-color: white;
+                            border-radius: 8px;
+                            padding: 30px;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        }}
+                        .header {{
+                            color: #2563eb;
+                            margin-bottom: 20px;
+                        }}
+                        .activity-info {{
+                            background-color: #f3f4f6;
+                            border-left: 4px solid #2563eb;
+                            padding: 15px;
+                            margin: 20px 0;
+                        }}
+                        .info-row {{
+                            margin: 10px 0;
+                        }}
+                        .label {{
+                            font-weight: bold;
+                            color: #2563eb;
+                        }}
+                        .button-container {{
+                            margin: 30px 0;
+                            text-align: center;
+                        }}
+                        .button {{
+                            display: block;
+                            width: 100%;
+                            margin: 0 auto;
+                            padding: 16px 32px;
+                            background-color: #2563eb;
+                            color: white !important;
+                            text-decoration: none;
+                            border-radius: 8px;
+                            font-weight: bold;
+                            font-size: 16px;
+                            text-align: center;
+                            box-sizing: border-box;
+                        }}
+                        .button:hover {{
+                            background-color: #1d4ed8;
+                        }}
+                        .footer {{
+                            margin-top: 30px;
+                            padding-top: 20px;
+                            border-top: 1px solid #e5e7eb;
+                            color: #6b7280;
+                            font-size: 14px;
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="card">
+                            <h1 class="header">¡Tu caso ha sido asignado!</h1>
+                            
+                            <p>Hola <strong>{user_name}</strong>,</p>
+                            
+                            <p>Tu solicitud de soporte ha sido <strong>asignada a un agente</strong> de nuestro equipo.</p>
+                            
+                            <div class="activity-info">
+                                <div class="info-row">
+                                    <span class="label">👤 Agente asignado:</span> {agent_name}
+                                </div>
+                                <div class="info-row">
+                                    <span class="label">💬 Estado:</span> En progreso
+                                </div>
+                            </div>
+                            
+                            <p>El agente revisará tu caso y se comunicará contigo a través del chat. Por favor, mantente atento a las respuestas en la plataforma.</p>
+                            
+                            <p><strong>¿Qué sigue?</strong></p>
+                            <ul>
+                                <li>El agente revisará el historial de tu conversación</li>
+                                <li>Recibirás respuestas directamente en el chat</li>
+                                <li>Puedes continuar la conversación en cualquier momento</li>
+                            </ul>
+                            
+                            <div class="button-container">
+                                <a href="{conversation_url}" class="button">💬 Ir a mi conversación</a>
+                            </div>
+                            
+                            <div class="footer">
+                                <p>Saludos,<br>
+                                <strong>{self.from_name}</strong></p>
+                                
+                                <p><em>Este es un correo automático, por favor no respondas a este mensaje.</em></p>
+                            </div>
+                        </div>
+                    </div>
+                </body>
+            </html>
+            """
+
+            text_body = f"""
+¡Buenas noticias, {user_name}!
+
+Tu solicitud de soporte ha sido asignada a un agente de nuestro equipo.
+
+👤 Agente asignado: {agent_name}
+💬 Estado: En progreso
+
+El agente revisará tu caso y se comunicará contigo a través del chat. 
+Por favor, mantente atento a las respuestas en la plataforma.
+
+¿Qué sigue?
+- El agente revisará el historial de tu conversación
+- Recibirás respuestas directamente en el chat
+- Puedes continuar la conversación en cualquier momento
+
+Visita la plataforma para ver tu conversación:
+{conversation_url}
+
+Saludos,
+{self.from_name}
+
+---
+Este es un correo automático, por favor no respondas a este mensaje.
+            """
+
+            return self._send_email(to_email, subject, html_body, text_body)
+
+        except Exception as e:
+            logger.error(f"Error sending agent assignment notification: {str(e)}")
+            return False
+
 
 # Factory function
 def get_email_service() -> EmailService:

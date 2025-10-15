@@ -16,6 +16,7 @@ export interface Message {
   rating?: 'up' | 'down' | null;
   rated_at?: string;
   response_type?: string;
+  image_url?: string; // 🔹 URL de imagen adjunta
 }
 
 export interface Conversation {
@@ -24,11 +25,29 @@ export interface Conversation {
   title?: string;
   is_escalated: boolean;
   escalated_at?: string;
+  resolved?: boolean;
+  resolved_at?: string;
   created_at: string;
   updated_at: string;
   last_message_at?: string;
   message_count?: number;
   last_message?: string;
+}
+
+export interface AgentRequest {
+  id: string;
+  status: 'pending' | 'in_progress' | 'resolved';
+  assigned_at?: string;
+  resolved_at?: string;
+  agent_name?: string;
+}
+
+export interface EscalationStatus {
+  is_escalated: boolean;
+  escalated_at?: string;
+  resolved: boolean;
+  resolved_at?: string;
+  agent_request?: AgentRequest | null;
 }
 
 export interface ConversationWithMessages {
@@ -106,7 +125,9 @@ export async function getConversationById(
     throw new Error('Failed to fetch conversation');
   }
 
-  return response.json();
+  const data = await response.json();
+
+  return data;
 }
 
 /**
@@ -284,6 +305,30 @@ export async function updateConversationTitle(
 
   if (!response.ok) {
     throw new Error('Failed to update title');
+  }
+
+  return response.json();
+}
+
+/**
+ * Get escalation status for a conversation
+ */
+export async function getEscalationStatus(
+  conversationId: string
+): Promise<EscalationStatus> {
+  const response = await fetch(
+    `${API_URL}/conversations/conversations/${conversationId}/escalation-status`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error('Failed to get escalation status');
   }
 
   return response.json();

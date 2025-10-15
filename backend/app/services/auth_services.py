@@ -63,14 +63,46 @@ def login_user(email: str, password: str) -> str:
 
 def get_user_info(user: Any) -> Dict[str, Any]:
     """Obtener información del usuario desde la tabla profiles"""
+    import time
+    from httpx import ReadError, ConnectError, TimeoutException
+
     user_id = user.id
-    profile = (
-        supabase_.table("profiles").select("*").eq("id", user_id).single().execute()
-    )
 
-    if not profile.data:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    # Retry logic para manejar errores de conexión HTTP/2
+    max_retries = 3
+    retry_delay = 0.5  # segundos
 
-    user_data = user.model_dump()
-    response = {**user_data, **profile.data}
-    return response
+    for attempt in range(max_retries):
+        try:
+            profile = (
+                supabase_.table("profiles")
+                .select("*")
+                .eq("id", user_id)
+                .single()
+                .execute()
+            )
+
+            if not profile.data:
+                raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+            user_data = user.model_dump()
+            response = {**user_data, **profile.data}
+            return response
+
+        except (ReadError, ConnectError, TimeoutException) as e:
+            if attempt < max_retries - 1:
+                print(
+                    f"⚠️ Connection error in get_user_info (attempt {attempt + 1}/{max_retries}): {e}"
+                )
+                time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+                continue
+            else:
+                print(f"❌ Failed to get user info after {max_retries} attempts: {e}")
+                raise HTTPException(
+                    status_code=503,
+                    detail="Error de conexión con la base de datos. Por favor, intente nuevamente.",
+                )
+        except Exception as e:
+            # Otros errores no son reintentos
+            print(f"❌ Unexpected error in get_user_info: {e}")
+            raise
