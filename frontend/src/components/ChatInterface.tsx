@@ -71,22 +71,6 @@ export default function ChatInterface({
   conversationId: propConversationId,
   conversationTitle,
 }: ChatInterfaceProps) {
-  // 🔹 DEBUG: Log al recibir initialMessages
-  useEffect(() => {
-    console.log('📥 ChatInterface - Recibió initialMessages:', {
-      count: initialMessages.length,
-      withImages: initialMessages.filter((m) => m.imageUrl).length,
-      sample: initialMessages[0]
-        ? {
-            id: initialMessages[0].id,
-            sender: initialMessages[0].sender,
-            hasImageUrl: !!initialMessages[0].imageUrl,
-            imageUrl: initialMessages[0].imageUrl,
-          }
-        : null,
-    });
-  }, [initialMessages]);
-
   const { user, loading } = useUser();
   const router = useRouter();
   const [inputValue, setInputValue] = useState('');
@@ -278,17 +262,14 @@ export default function ChatInterface({
         // If agent has taken the case (status = 'in_progress'), unblock the chat
         if (agentRequest && agentRequest.status === 'in_progress') {
           setBlocked(false);
-          console.log('✅ Agent took the case - Chat unblocked');
         }
         // If case is resolved, keep blocked (conversation ended)
         else if (agentRequest && agentRequest.status === 'resolved') {
           setBlocked(true);
-          console.log('⚠️ Case resolved - Chat remains blocked');
         }
         // If pending (waiting for agent), keep blocked
         else if (agentRequest && agentRequest.status === 'pending') {
           setBlocked(true);
-          console.log('⏳ Waiting for agent - Chat blocked');
         }
       }
     }
@@ -321,9 +302,6 @@ export default function ChatInterface({
       const timer = setTimeout(() => {
         try {
           recognitionRef.current?.start();
-          console.log(
-            '🔄 Reiniciando reconocimiento después de redirect (voiceMode activo)'
-          );
         } catch (e) {
           console.warn(
             'No se pudo reiniciar reconocimiento después de redirect:',
@@ -388,15 +366,6 @@ export default function ChatInterface({
       utter.onend = () => {
         // TTS finished
         ttsPlayingRef.current = false;
-        console.log(
-          '🔊 TTS finalizado - preparando para reiniciar reconocimiento',
-          {
-            voiceMode: voiceModeRef.current,
-            speakResponses: speakResponsesRef.current,
-            blocked: blockedRef.current,
-            waitingForResponse: waitingForResponseRef.current,
-          }
-        );
 
         // After speaking, if voice mode still active and not blocked, restart recognition
         setTimeout(() => {
@@ -407,7 +376,6 @@ export default function ChatInterface({
             !waitingForResponseRef.current // Asegurar que no estamos esperando otra respuesta
           ) {
             try {
-              console.log('🔄 Reiniciando reconocimiento después de TTS');
               // Limpiar acumulador antes de reiniciar
               transcriptAccumulatorRef.current = '';
               recognitionRef.current?.start();
@@ -421,13 +389,6 @@ export default function ChatInterface({
                 console.error('Error crítico al reiniciar:', e);
               }
             }
-          } else {
-            console.log('❌ No se reinició reconocimiento:', {
-              voiceMode: voiceModeRef.current,
-              speakResponses: speakResponsesRef.current,
-              blocked: blockedRef.current,
-              waitingForResponse: waitingForResponseRef.current,
-            });
           }
         }, 250);
       };
@@ -458,10 +419,6 @@ export default function ChatInterface({
         // Only add if message doesn't already exist
         setMessages((prev) => {
           if (prev.some((m) => m.id === newMessage.id)) {
-            console.log(
-              '⚠️ Duplicate message detected, skipping:',
-              newMessage.id
-            );
             return prev;
           }
           return [...prev, newMessage];
@@ -808,13 +765,11 @@ export default function ChatInterface({
     (text: string) => {
       // Prevent sending if queue is blocked
       if (sendingQueueRef.current) {
-        console.log('⚠️ Student: Message send blocked - already sending');
         return;
       }
 
       // 🔹 BLOQUEO: Si el caso está resuelto, no permitir envío
       if (escalationStatus?.agent_request?.status === 'resolved') {
-        console.log('⚠️ Caso resuelto - no se pueden enviar mensajes');
         return;
       }
 
@@ -829,11 +784,6 @@ export default function ChatInterface({
         escalationStatus?.agent_request?.status === 'pending';
 
       if (text.trim() === '' || blocked || isEscalatedPending) {
-        if (isEscalatedPending) {
-          console.log(
-            '⏳ Chat escalado pendiente - esperando que agente tome el caso'
-          );
-        }
         return;
       }
 
@@ -855,10 +805,6 @@ export default function ChatInterface({
       // Only add if message doesn't already exist (check by id)
       setMessages((prev: Message[]) => {
         if (prev.some((m) => m.id === newMessage.id)) {
-          console.log(
-            '⚠️ Duplicate message detected, skipping:',
-            newMessage.id
-          );
           return prev;
         }
         return [...prev, newMessage];
@@ -874,16 +820,10 @@ export default function ChatInterface({
         if (hasActiveAgent && wsConnected) {
           // Agente activo - enviar por WebSocket
           const sent = wsSendMessage(text);
-          if (sent) {
-            console.log('📤 Message sent to agent via WebSocket');
-          } else {
+          if (!sent) {
             console.error('❌ Failed to send via WebSocket');
             // No fallback to chatbot - chat is escalated
           }
-        } else {
-          // Escalado pero agente no activo (pendiente)
-          console.log('⏳ Chat escalated - waiting for agent to take case');
-          // Message already added to UI, but won't be sent until agent takes case
         }
       } else {
         // Chat NO escalado - comportamiento normal (FAQs y chatbot IA)
@@ -951,9 +891,6 @@ export default function ChatInterface({
             clearTimeout(silenceTimerRef.current);
             silenceTimerRef.current = null;
           }
-          console.log('✅ Recognition started', {
-            hasActiveAgent: hasActiveAgentRef.current,
-          });
         };
 
         recognition.onend = () => {
@@ -965,13 +902,8 @@ export default function ChatInterface({
             silenceTimerRef.current = null;
           }
 
-          console.log('🎤 Grabación finalizada', {
-            hasActiveAgent: hasActiveAgentRef.current,
-          });
-
           // 🔹 Si hay agente activo, NO reiniciar reconocimiento automáticamente
           if (hasActiveAgentRef.current) {
-            console.log('✅ Modo agente: No reiniciar reconocimiento');
             return; // Salir aquí - cada grabación es independiente en modo agente
           }
 
@@ -979,14 +911,12 @@ export default function ChatInterface({
           // If TTS is playing (we intentionally aborted recognition before speaking), or
           // we're waiting for the chatbot response, don't auto-restart here.
           if (ttsPlayingRef.current || waitingForResponseRef.current) {
-            console.log('🎧 TTS is playing — not restarting recognition now');
             return;
           }
           // If voiceMode is active, try to restart recognition to keep the loop
           if (voiceModeRef.current && !blockedRef.current) {
             try {
               recognitionRef.current?.start();
-              console.log('🔄 Reiniciando reconocimiento (modo voz continuo)');
             } catch (e) {
               console.warn('No se pudo reiniciar reconocimiento:', e);
             }
@@ -1000,9 +930,6 @@ export default function ChatInterface({
           if (ev?.error === 'aborted' || ev?.error === 'no-speech') {
             setIsRecording(false);
             // 'no-speech' es normal con continuous=true, solo significa que no detectó voz por un momento
-            if (ev?.error === 'no-speech') {
-              console.log('ℹ️ No se detectó voz (normal en modo continuo)');
-            }
             return;
           }
 
@@ -1061,20 +988,12 @@ export default function ChatInterface({
           const lastResult = results[results.length - 1];
           const isFinal = lastResult.isFinal as boolean;
 
-          console.log('📝 Transcripción:', {
-            fullTranscript,
-            isFinal,
-            hasActiveAgent: hasActiveAgentRef.current,
-          });
-
           // Actualizar input con el texto acumulado (incluso si es intermedio)
           setInputValue(fullTranscript);
 
           // 🔹 Si es resultado FINAL, enviar el mensaje
           if (isFinal && fullTranscript.trim()) {
             const finalTranscript = fullTranscript.trim();
-
-            console.log('✅ Resultado final detectado - enviando mensaje');
 
             // Limpiar el acumulador y el input
             transcriptAccumulatorRef.current = '';
@@ -1088,7 +1007,6 @@ export default function ChatInterface({
 
             // 🔹 Si hay agente activo, enviar inmediatamente SIN cooldown
             if (hasActiveAgentRef.current) {
-              console.log('📤 Enviando mensaje en modo agente (sin cooldown)');
               setTimeout(() => {
                 handleSendMessageWithText(finalTranscript);
               }, 100);
@@ -1135,13 +1053,6 @@ export default function ChatInterface({
 
   // 🎤 Toggle grabación de audio
   const toggleRecording = () => {
-    console.log('🎙️ toggleRecording llamado', {
-      isRecording,
-      hasActiveAgent: hasActiveAgentRef.current,
-      blocked,
-      voiceMode,
-    });
-
     if (!isSpeechSupported || !recognitionRef.current) {
       console.warn(
         'SpeechRecognition not supported in this browser. Voice mode unavailable.'
@@ -1150,7 +1061,6 @@ export default function ChatInterface({
     }
 
     if (blocked) {
-      console.log('⚠️ Chat bloqueado, no se puede grabar');
       return;
     }
 
@@ -1160,7 +1070,6 @@ export default function ChatInterface({
       if (isRecording) {
         try {
           recognitionRef.current.stop();
-          console.log('� Deteniendo grabación manualmente (modo agente)');
         } catch (e) {
           console.error('Error stopping recognition:', e);
         }
@@ -1169,7 +1078,6 @@ export default function ChatInterface({
 
       // Si NO está grabando, iniciar
       try {
-        console.log('🎤 Iniciando grabación (modo agente)');
         recognitionRef.current.start();
       } catch (e) {
         console.error('Error starting recognition:', e);
@@ -1179,7 +1087,6 @@ export default function ChatInterface({
           setTimeout(() => {
             try {
               recognitionRef.current?.start();
-              console.log('� Reintentando inicio de grabación');
             } catch (retryError) {
               console.error('Error en reintento:', retryError);
             }
@@ -1336,7 +1243,6 @@ export default function ChatInterface({
       if (typeof id === 'string' && rating) {
         try {
           await rateMessageAPI(id, rating);
-          console.log('Message rated successfully');
         } catch (error) {
           console.error('Failed to rate message:', error);
           // Optionally revert the rating in case of error
@@ -1354,13 +1260,8 @@ export default function ChatInterface({
   const handleSendMessage = async () => {
     // Prevent sending if queue is blocked
     if (sendingQueueRef.current) {
-      console.log('⚠️ Student: Message send blocked - already sending');
       return;
     }
-
-    const hasActiveAgent =
-      escalationStatus?.is_escalated &&
-      escalationStatus?.agent_request?.status === 'in_progress';
 
     // Si hay imagen seleccionada, enviar con imagen
     if (selectedImage && conversationId) {
@@ -1393,12 +1294,6 @@ export default function ChatInterface({
           // Limpiar estados
           setInputValue('');
           handleCancelImage();
-
-          // Si usa WebSocket, notificar al agente
-          if (hasActiveAgent && wsConnected) {
-            // El mensaje ya está guardado en BD, el WebSocket lo transmitirá
-            console.log('📤 Imagen enviada y guardada en BD');
-          }
         }
 
         // Wait a bit to ensure message is processed

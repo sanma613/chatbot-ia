@@ -47,7 +47,6 @@ export function useWebSocketChat({
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
-      console.log('✅ WebSocket connected to conversation:', conversationId);
       setIsConnected(true);
       setError(null);
     };
@@ -59,9 +58,6 @@ export function useWebSocketChat({
         if (data.type === 'message' && onMessage) {
           // Received a new message from another user
           onMessage(data.message);
-        } else if (data.type === 'message_sent') {
-          // Confirmation that our message was sent
-          console.log('📤 Message sent successfully:', data.message_id);
         } else if (data.type === 'error') {
           console.error('❌ WebSocket error:', data.message);
           setError(data.message);
@@ -78,7 +74,6 @@ export function useWebSocketChat({
     };
 
     ws.onclose = () => {
-      console.log('🔌 WebSocket disconnected');
       setIsConnected(false);
     };
 

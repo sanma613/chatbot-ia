@@ -127,21 +127,6 @@ export async function getConversationById(
 
   const data = await response.json();
 
-  // 🔹 DEBUG: Log para ver qué devuelve el backend
-  console.log(
-    '🌐 conversationApi.getConversationById - Respuesta del backend:',
-    {
-      conversationId,
-      messageCount: data.messages?.length || 0,
-      messages: data.messages?.map((msg: Message) => ({
-        id: msg.id,
-        role: msg.role,
-        hasImage: !!msg.image_url,
-        image_url: msg.image_url,
-      })),
-    }
-  );
-
   return data;
 }
 

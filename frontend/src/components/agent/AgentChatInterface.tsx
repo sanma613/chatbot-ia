@@ -158,7 +158,6 @@ export default function AgentChatInterface({
   // WebSocket message handler - receive messages from user
   const handleWebSocketMessage = useCallback(
     (wsMessage: WebSocketMessage) => {
-      console.log('🔵 Agent received WebSocket message:', wsMessage);
       if (wsMessage.role === 'user') {
         const newMessage: AgentMessage = {
           id: String(wsMessage.id),
@@ -171,10 +170,6 @@ export default function AgentChatInterface({
         // Only add if message doesn't already exist
         setMessages((prev) => {
           if (prev.some((m) => m.id === newMessage.id)) {
-            console.log(
-              '⚠️ Duplicate message detected, skipping:',
-              newMessage.id
-            );
             return prev;
           }
           return [...prev, newMessage];
@@ -193,14 +188,6 @@ export default function AgentChatInterface({
       onMessage: handleWebSocketMessage,
       enabled: true, // Always enabled for agents
     });
-
-  useEffect(() => {
-    if (wsConnected) {
-      console.log('✅ Agent WebSocket connected');
-    } else {
-      console.log('❌ Agent WebSocket disconnected');
-    }
-  }, [wsConnected]);
 
   const scrollToBottom = (instant = false) => {
     messagesEndRef.current?.scrollIntoView({
@@ -252,7 +239,6 @@ export default function AgentChatInterface({
     async (text: string) => {
       // Prevent sending if already sending or queue is blocked
       if (!text.trim() || sending || sendingQueueRef.current) {
-        console.log('⚠️ Agent: Message send blocked - already sending');
         return;
       }
 
@@ -264,7 +250,6 @@ export default function AgentChatInterface({
       try {
         // Use WebSocket if connected, otherwise fall back to HTTP
         if (wsConnected) {
-          console.log('📤 Agent sending message via WebSocket');
           wsSendMessage(messageContent);
           // Add message to local state immediately
           const newMessage: AgentMessage = {
@@ -287,13 +272,11 @@ export default function AgentChatInterface({
                 ) < 1000
             );
             if (isDuplicate) {
-              console.log('⚠️ Duplicate message detected, skipping');
               return prev;
             }
             return [...prev, newMessage];
           });
         } else {
-          console.log('❌ WebSocket not connected, falling back to HTTP');
           const newMessage = await sendAgentMessage(
             activeCase.conversation.id,
             messageContent
@@ -301,10 +284,6 @@ export default function AgentChatInterface({
           setMessages((prev) => {
             // Check for duplicates by ID
             if (prev.some((m) => m.id === newMessage.id)) {
-              console.log(
-                '⚠️ Duplicate message detected, skipping:',
-                newMessage.id
-              );
               return prev;
             }
             return [...prev, newMessage];
@@ -343,12 +322,10 @@ export default function AgentChatInterface({
 
         recognition.onstart = () => {
           setIsRecording(true);
-          console.log('🎤 Agent: Grabación iniciada');
         };
 
         recognition.onend = () => {
           setIsRecording(false);
-          console.log('🎤 Agent: Grabación finalizada');
         };
 
         recognition.onerror = (event: unknown) => {
@@ -374,7 +351,6 @@ export default function AgentChatInterface({
               }
             | undefined;
           const transcript = ev?.results?.[0]?.[0]?.transcript ?? '';
-          console.log('📝 Agent: Transcripción:', transcript);
 
           // Actualizar input con el texto transcrito
           setInputValue(transcript);
@@ -411,7 +387,6 @@ export default function AgentChatInterface({
   const handleSendMessage = async () => {
     // Block if already sending
     if (sending || sendingQueueRef.current) {
-      console.log('⚠️ Agent: Message send blocked - already sending');
       return;
     }
 
@@ -465,7 +440,6 @@ export default function AgentChatInterface({
     try {
       // Use WebSocket if connected, otherwise fall back to HTTP
       if (wsConnected) {
-        console.log('📤 Agent sending message via WebSocket');
         wsSendMessage(messageContent);
         // Add message to local state immediately
         const newMessage: AgentMessage = {
@@ -488,13 +462,11 @@ export default function AgentChatInterface({
               ) < 1000
           );
           if (isDuplicate) {
-            console.log('⚠️ Duplicate message detected, skipping');
             return prev;
           }
           return [...prev, newMessage];
         });
       } else {
-        console.log('❌ WebSocket not connected, falling back to HTTP');
         const newMessage = await sendAgentMessage(
           activeCase.conversation.id,
           messageContent
@@ -502,10 +474,6 @@ export default function AgentChatInterface({
         setMessages((prev) => {
           // Check for duplicates by ID
           if (prev.some((m) => m.id === newMessage.id)) {
-            console.log(
-              '⚠️ Duplicate message detected, skipping:',
-              newMessage.id
-            );
             return prev;
           }
           return [...prev, newMessage];

@@ -41,22 +41,6 @@ export default function ChatBase({
   const isFirstRenderRef = useRef(true);
   const prevMessagesLengthRef = useRef(0); // 🟢 NUEVO: Trackear cantidad anterior
 
-  // 🔹 DEBUG: Log todos los mensajes que llegan a ChatBase
-  useEffect(() => {
-    console.log('📨 ChatBase recibió mensajes:', messages.length);
-    messages.forEach((msg, idx) => {
-      console.log(`Mensaje ${idx}:`, {
-        id: msg.id,
-        sender: msg.sender,
-        role: msg.role,
-        hasImageUrl: !!msg.imageUrl,
-        hasImage_url: !!msg.image_url,
-        imageUrl: msg.imageUrl,
-        image_url: msg.image_url,
-      });
-    });
-  }, [messages]);
-
   const scrollToBottom = (instant = false) => {
     messagesEndRef.current?.scrollIntoView({
       behavior: instant ? 'auto' : 'smooth',
@@ -141,17 +125,6 @@ export default function ChatBase({
 
     const finalImageUrl = msg.imageUrl || msg.image_url || null;
 
-    // 🔹 DEBUG: Log para ver qué imágenes se están procesando
-    if (finalImageUrl) {
-      console.log('📸 ChatBase: Imagen detectada', {
-        id: uniqueId,
-        imageUrl: msg.imageUrl,
-        image_url: msg.image_url,
-        finalImageUrl,
-        role: msg.role || msg.sender,
-      });
-    }
-
     return {
       id: uniqueId,
       originalId: msg.id, // Keep original for ratings
@@ -230,12 +203,8 @@ export default function ChatBase({
                       className="max-w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
                       style={{ maxHeight: '400px', objectFit: 'contain' }}
                       onClick={() => {
-                        console.log('🖼️ Abriendo imagen:', normalized.imageUrl);
                         window.open(normalized.imageUrl!, '_blank');
                       }}
-                      onLoad={() =>
-                        console.log('✅ Imagen cargada:', normalized.imageUrl)
-                      }
                       onError={(e) =>
                         console.error(
                           '❌ Error cargando imagen:',

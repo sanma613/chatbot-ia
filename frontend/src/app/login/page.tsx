@@ -59,8 +59,7 @@ export default function LoginPage() {
     e.preventDefault();
 
     try {
-      const result = await loginUser(formData);
-      console.log('Usuario logueado:', result);
+      await loginUser(formData);
 
       showSuccess(
         '¡Bienvenido!',

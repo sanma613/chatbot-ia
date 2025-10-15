@@ -62,12 +62,6 @@ export async function middleware(request: NextRequest) {
     const data = await response.json();
     const userRole = data?.user?.role;
 
-    console.log('[Middleware] Pathname:', pathname);
-    console.log('[Middleware] User role:', userRole);
-    console.log('[Middleware] isUserRoute:', isUserRoute);
-    console.log('[Middleware] isAgentRoute:', isAgentRoute);
-    console.log('[Middleware] isAdminRoute:', isAdminRoute);
-
     // Verificar permisos según el rol y la ruta
     if (isUserRoute && userRole !== 'user') {
       // Ruta de usuario pero el usuario tiene otro rol -> redirigir a su panel
