@@ -685,17 +685,17 @@ export default function AgentChatInterface({
                               <li className="text-white">{children}</li>
                             ),
                             blockquote: ({ children }) => (
-                              <blockquote className="border-l-4 border-primary pl-4 py-2 my-2 bg-blue-50 rounded">
+                              <blockquote className="border-l-4 border-white border-opacity-50 pl-4 py-2 my-2 bg-white bg-opacity-10 rounded text-white">
                                 {children}
                               </blockquote>
                             ),
                             code: ({ children }) => (
-                              <code className="bg-gray-200 px-2 py-1 rounded text-sm font-mono text-primary">
+                              <code className="bg-white bg-opacity-20 px-2 py-1 rounded text-sm font-mono text-white">
                                 {children}
                               </code>
                             ),
                             pre: ({ children }) => (
-                              <pre className="bg-gray-800 text-gray-100 p-3 rounded-lg overflow-x-auto my-2">
+                              <pre className="bg-dark text-white p-3 rounded-lg overflow-x-auto my-2 border border-white border-opacity-20">
                                 {children}
                               </pre>
                             ),

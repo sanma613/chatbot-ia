@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Clock, User, Mail, AlertCircle } from 'lucide-react';
+import { Clock, User, Mail, AlertCircle, MessageSquare } from 'lucide-react';
 import type { AgentRequest } from '@/types/agentRequest';
 import { cn } from '@/lib/Utils';
 
@@ -49,93 +49,107 @@ export default function RequestList({
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <span className="ml-2 text-dark">Cargando solicitudes...</span>
       </div>
     );
   }
 
   if (requests.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-        <AlertCircle size={48} className="mb-4" />
-        <p className="text-lg font-semibold">No hay solicitudes pendientes</p>
-        <p className="text-sm">Las nuevas solicitudes aparecerán aquí</p>
+      <div className="flex flex-col items-center justify-center h-64 text-dark">
+        <AlertCircle size={48} className="mb-4 text-primary opacity-50" />
+        <p className="text-lg font-semibold text-dark">
+          No hay solicitudes pendientes
+        </p>
+        <p className="text-sm text-dark opacity-70">
+          Las nuevas solicitudes aparecerán aquí
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {requests.map((request) => (
         <div
           key={request.id}
-          className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+          className={cn(
+            'block p-6 bg-white rounded-lg border border-gray-200',
+            'hover:border-primary hover:shadow-lg transition-all duration-200',
+            'group'
+          )}
         >
           {/* Header */}
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
-                <User size={20} className="text-white" />
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                <User size={24} className="text-white" />
               </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">
+              <div className="min-w-0">
+                <h3 className="text-lg font-semibold text-dark truncate">
                   {request.user_name || 'Usuario'}
                 </h3>
-                <div className="flex items-center gap-1 text-sm text-gray-500">
+                <div className="flex items-center gap-1 text-sm text-dark opacity-70">
                   <Mail size={14} />
-                  <span>{request.user_email}</span>
+                  <span className="truncate">{request.user_email}</span>
                 </div>
               </div>
-            </div>
-            <div className="flex items-center gap-1 text-xs text-gray-500">
-              <Clock size={14} />
-              <span>{formatDate(request.escalated_at)}</span>
             </div>
           </div>
 
           {/* Preview del último mensaje */}
           {request.last_message && (
-            <div className="mb-3 p-3 bg-gray-50 rounded-md">
-              <p className="text-sm text-gray-700 line-clamp-2">
+            <div className="mb-4 p-3 bg-light rounded-md border border-gray-200">
+              <p className="text-sm text-dark line-clamp-2">
                 {request.last_message}
               </p>
             </div>
           )}
 
-          {/* Info adicional */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4 text-xs text-gray-500">
+          {/* Metadatos */}
+          <div className="flex items-center gap-4 text-sm text-dark mb-4">
+            <div className="flex items-center gap-1">
+              <Clock className="w-4 h-4" />
+              <span>{formatDate(request.escalated_at)}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <MessageSquare className="w-4 h-4" />
               <span>
                 {request.message_count || 0} mensaje
                 {(request.message_count || 0) !== 1 ? 's' : ''}
               </span>
-              <span
-                className={cn(
-                  'px-2 py-1 rounded-full font-semibold',
-                  request.status === 'pending'
-                    ? 'bg-warning bg-opacity-20 text-warning'
-                    : request.status === 'in_progress'
-                      ? 'bg-primary bg-opacity-20 text-primary'
-                      : 'bg-success bg-opacity-20 text-success'
-                )}
-              >
-                {request.status === 'pending'
-                  ? 'Pendiente'
-                  : request.status === 'in_progress'
-                    ? 'En Progreso'
-                    : 'Resuelta'}
-              </span>
             </div>
+          </div>
+
+          {/* Footer: Badge de estado y botón de acción */}
+          <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+            <span
+              className={cn(
+                'px-3 py-1 rounded-full text-xs font-semibold',
+                request.status === 'pending'
+                  ? 'bg-warning bg-opacity-20 text-warning'
+                  : request.status === 'in_progress'
+                    ? 'bg-info bg-opacity-20 text-info'
+                    : 'bg-success bg-opacity-20 text-success'
+              )}
+            >
+              {request.status === 'pending'
+                ? 'Pendiente'
+                : request.status === 'in_progress'
+                  ? 'En Progreso'
+                  : 'Resuelta'}
+            </span>
 
             {request.status === 'pending' && (
               <button
                 onClick={() => handleTake(request.id)}
                 disabled={takingId === request.id}
                 className={cn(
-                  'px-4 py-2 rounded-lg font-semibold transition-colors',
+                  'px-4 py-2 rounded-lg font-semibold transition-colors text-sm',
                   takingId === request.id
                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-primary text-white hover:bg-secondary'
+                    : 'bg-primary text-white hover:bg-primary-dark shadow-md hover:shadow-lg'
                 )}
               >
                 {takingId === request.id ? 'Tomando...' : 'Tomar caso'}
