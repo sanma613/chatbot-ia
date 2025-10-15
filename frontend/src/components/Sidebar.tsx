@@ -9,21 +9,27 @@ import {
   Calendar,
   History,
   Bell,
-  ChevronsRight,
   LogOut,
+  LucideIcon,
 } from 'lucide-react';
 
 import { useUser } from '@/hooks/useUser';
 import { handleError } from '@/lib/errors';
 import { cn } from '@/lib/Utils';
 
-// --- Items de navegación ---
-const navItems = [
+// --- Tipo para items de navegación ---
+export type NavItem = {
+  name: string;
+  href: string;
+  icon: LucideIcon;
+};
+
+// --- Items de navegación por defecto (student) ---
+const defaultNavItems: NavItem[] = [
   { name: 'Chatbot', href: '/chat', icon: MessageSquare },
   { name: 'Calendario', href: '/calendar', icon: Calendar },
   { name: 'Historial', href: '/history', icon: History },
   { name: 'Notificaciones', href: '/notifications', icon: Bell },
-  { name: 'Escalada', href: '/escalate', icon: ChevronsRight },
 ];
 
 // --- Avatar de usuario ---
@@ -37,7 +43,7 @@ const UserAvatar = ({ fullName }: { fullName?: string }) => {
 };
 
 // --- Link de navegación ---
-const NavLink = ({ item }: { item: (typeof navItems)[0] }) => {
+const NavLink = ({ item }: { item: NavItem }) => {
   const pathname = usePathname();
   const isActive = pathname === item.href;
 
@@ -57,8 +63,13 @@ const NavLink = ({ item }: { item: (typeof navItems)[0] }) => {
   );
 };
 
+// --- Sidebar Props ---
+interface SidebarProps {
+  navItems?: NavItem[];
+}
+
 // --- Sidebar ---
-export default function Sidebar() {
+export default function Sidebar({ navItems = defaultNavItems }: SidebarProps) {
   const { user, loading } = useUser();
   const router = useRouter();
   const url = process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -106,6 +117,7 @@ export default function Sidebar() {
           alt="Logo Unichatbot"
           width={200}
           height={50}
+          style={{ width: '200px', height: 'auto' }}
         />
       </div>
 

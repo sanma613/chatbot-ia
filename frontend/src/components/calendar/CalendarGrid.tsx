@@ -1,6 +1,6 @@
 import React from 'react';
 import { Activity, weekDays } from '@/app/types/calendar';
-import { cn } from '@/lib/Utils';
+import { cn, getLocalDateString } from '@/lib/Utils';
 
 interface CalendarGridProps {
   currentDate: Date;
@@ -52,7 +52,8 @@ export default function CalendarGrid({
   };
 
   const days = getDaysInMonth();
-  const today = new Date().toISOString().split('T')[0];
+  // Usar fecha local sin conversión a UTC
+  const today = getLocalDateString();
 
   return (
     <div className="grid grid-cols-7 gap-1">

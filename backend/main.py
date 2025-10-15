@@ -11,6 +11,9 @@ from app.routes import (
     activity_routes,
     notification_routes,
     email_routes,
+    agent_routes,
+    websocket_routes,
+    message_routes,
 )
 from app.services.scheduler_service import start_scheduler, stop_scheduler
 
@@ -58,6 +61,9 @@ app.include_router(conversation_routes.router, prefix="/conversations")
 app.include_router(activity_routes.router, prefix="/activities")
 app.include_router(notification_routes.router, prefix="/notifications")
 app.include_router(email_routes.router, prefix="/email")
+app.include_router(agent_routes.router, prefix="/agent")
+app.include_router(message_routes.router)  # Message routes with images
+app.include_router(websocket_routes.router)  # WebSocket routes
 
 
 if __name__ == "__main__":

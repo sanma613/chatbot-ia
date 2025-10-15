@@ -1,35 +1,27 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Rutas que requieren autenticación
-const protectedRoutes = [
-  '/chat',
-  '/calendar',
-  '/history',
-  '/notifications',
-];
+// Rutas que requieren autenticación de usuario (estudiante)
+const userRoutes = ['/chat', '/calendar', '/history', '/notifications'];
+
+// Rutas que requieren permisos de agente de soporte
+const agentRoutes = ['/caso-activo', '/solicitudes'];
 
 // Rutas que requieren permisos de administrador
-const adminRoutes = [
-  '/escalate',
-  '/admin'
-];
+const adminRoutes = ['/escalate', '/admin'];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Verificar si la ruta necesita protección
-  const isProtectedRoute = protectedRoutes.some((route) =>
-    pathname.startsWith(route)
-  );
-  
-  // Verificar si es una ruta de administrador
-  const isAdminRoute = adminRoutes.some((route) =>
-    pathname.startsWith(route)
-  );
+  // Verificar el tipo de ruta
+  const isUserRoute = userRoutes.some((route) => pathname.startsWith(route));
 
-  // Si no es una ruta protegida ni de admin, continuar
-  if (!isProtectedRoute && !isAdminRoute) {
+  const isAgentRoute = agentRoutes.some((route) => pathname.startsWith(route));
+
+  const isAdminRoute = adminRoutes.some((route) => pathname.startsWith(route));
+
+  // Si no es ninguna ruta protegida, continuar
+  if (!isUserRoute && !isAgentRoute && !isAdminRoute) {
     return NextResponse.next();
   }
 
@@ -43,7 +35,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Verificar si el token es válido haciendo una petición al backend
+  // Verificar si el token es válido y obtener el rol del usuario
   try {
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
     const response = await fetch(`${backendUrl}/auth/me`, {
@@ -66,7 +58,63 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
-    // Token válido, continuar
+    // Obtener el rol del usuario
+    const data = await response.json();
+    const userRole = data?.user?.role;
+
+    console.log('[Middleware] Pathname:', pathname);
+    console.log('[Middleware] User role:', userRole);
+    console.log('[Middleware] isUserRoute:', isUserRoute);
+    console.log('[Middleware] isAgentRoute:', isAgentRoute);
+    console.log('[Middleware] isAdminRoute:', isAdminRoute);
+
+    // Verificar permisos según el rol y la ruta
+    if (isUserRoute && userRole !== 'user') {
+      // Ruta de usuario pero el usuario tiene otro rol -> redirigir a su panel
+      if (userRole === 'agent') {
+        const agentUrl = new URL('/caso-activo', request.url);
+        return NextResponse.redirect(agentUrl);
+      }
+      if (userRole === 'admin') {
+        const adminUrl = new URL('/escalate', request.url);
+        return NextResponse.redirect(adminUrl);
+      }
+      // Si no tiene rol reconocido, mostrar 401
+      const unauthorizedUrl = new URL('/401', request.url);
+      return NextResponse.redirect(unauthorizedUrl);
+    }
+
+    if (isAgentRoute && userRole !== 'agent') {
+      // Ruta de agente pero el usuario tiene otro rol -> redirigir a su panel
+      if (userRole === 'user') {
+        const userUrl = new URL('/chat', request.url);
+        return NextResponse.redirect(userUrl);
+      }
+      if (userRole === 'admin') {
+        const adminUrl = new URL('/escalate', request.url);
+        return NextResponse.redirect(adminUrl);
+      }
+      // Si no tiene rol reconocido, mostrar 401
+      const unauthorizedUrl = new URL('/401', request.url);
+      return NextResponse.redirect(unauthorizedUrl);
+    }
+
+    if (isAdminRoute && userRole !== 'admin') {
+      // Ruta de admin pero el usuario tiene otro rol -> redirigir a su panel
+      if (userRole === 'user') {
+        const userUrl = new URL('/chat', request.url);
+        return NextResponse.redirect(userUrl);
+      }
+      if (userRole === 'agent') {
+        const agentUrl = new URL('/caso-activo', request.url);
+        return NextResponse.redirect(agentUrl);
+      }
+      // Si no tiene rol reconocido, mostrar 401
+      const unauthorizedUrl = new URL('/401', request.url);
+      return NextResponse.redirect(unauthorizedUrl);
+    }
+
+    // Token válido y rol correcto, continuar
     return NextResponse.next();
   } catch (error) {
     console.error('Error verificando autenticación:', error);

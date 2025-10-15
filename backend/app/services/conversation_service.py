@@ -1,5 +1,5 @@
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from openai import OpenAI
 from app.core.config import supabase_, Config
 
@@ -7,6 +7,14 @@ client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=Config.OPENROUTER_API_KEY,
 )
+
+
+def get_utc_timestamp() -> str:
+    """
+    Obtener timestamp UTC en formato compatible con Supabase.
+    Supabase espera formato ISO sin timezone explícito (naive UTC).
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
 
 def create_conversation(user_id: str) -> Dict[str, Any]:
@@ -144,7 +152,7 @@ def save_message(
                     "role": role,
                     "content": content,
                     "response_type": response_type,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": get_utc_timestamp(),
                 }
             )
             .execute()
@@ -260,7 +268,7 @@ def update_conversation_title(conversation_id: str, title: str) -> bool:
     try:
         response = (
             supabase_.table("conversations")
-            .update({"title": title, "updated_at": datetime.utcnow().isoformat()})
+            .update({"title": title, "updated_at": get_utc_timestamp()})
             .eq("id", conversation_id)
             .execute()
         )
@@ -307,22 +315,63 @@ def auto_generate_title_if_needed(conversation_id: str) -> None:
 def escalate_conversation(conversation_id: str) -> bool:
     """
     Mark a conversation as escalated (user requested human assistance).
+    Creates an agent_request record for the escalated conversation.
     """
     try:
+        # Verificar si ya existe un agent_request para esta conversación
+        existing_request = (
+            supabase_.table("agent_requests")
+            .select("id")
+            .eq("conversation_id", conversation_id)
+            .execute()
+        )
+
+        if existing_request.data and len(existing_request.data) > 0:
+            print(f"Agent request already exists for conversation {conversation_id}")
+            return True  # Ya está escalada, retornar True
+
+        # Marcar la conversación como escalada
         response = (
             supabase_.table("conversations")
             .update(
                 {
                     "is_escalated": True,
-                    "escalated_at": datetime.utcnow().isoformat(),
-                    "updated_at": datetime.utcnow().isoformat(),
+                    "escalated_at": get_utc_timestamp(),
+                    "updated_at": get_utc_timestamp(),
                 }
             )
             .eq("id", conversation_id)
             .execute()
         )
 
-        return bool(response.data)
+        if not response.data:
+            print(f"Failed to update conversation {conversation_id} as escalated")
+            return False
+
+        # Crear un agent_request con status='pending'
+        agent_request_response = (
+            supabase_.table("agent_requests")
+            .insert(
+                {
+                    "conversation_id": conversation_id,
+                    "status": "pending",
+                    "created_at": get_utc_timestamp(),
+                    "updated_at": get_utc_timestamp(),
+                }
+            )
+            .execute()
+        )
+
+        if agent_request_response.data:
+            print(
+                f"✅ Escalated conversation {conversation_id} - Created agent_request"
+            )
+            return True
+        else:
+            print(
+                f"❌ Failed to create agent_request for conversation {conversation_id}"
+            )
+            return False
 
     except Exception as e:
         print(f"Error escalating conversation: {e}")
@@ -340,7 +389,7 @@ def rate_message(message_id: str, rating: str) -> bool:
 
         response = (
             supabase_.table("messages")
-            .update({"rating": rating, "rated_at": datetime.utcnow().isoformat()})
+            .update({"rating": rating, "rated_at": get_utc_timestamp()})
             .eq("id", message_id)
             .execute()
         )
@@ -385,7 +434,12 @@ def detect_escalation_request(message: str) -> bool:
     ]
 
     message_lower = message.lower()
-    return any(phrase in message_lower for phrase in escalation_phrases)
+    is_escalation = any(phrase in message_lower for phrase in escalation_phrases)
+
+    if is_escalation:
+        print(f"🔔 ESCALATION DETECTED in message: '{message}'")
+
+    return is_escalation
 
 
 def delete_conversation(conversation_id: str) -> bool:

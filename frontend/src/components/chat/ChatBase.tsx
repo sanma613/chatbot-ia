@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useRef, useEffect } from 'react';
-import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import { ThumbsUpIcon, ThumbsDownIcon } from 'lucide-react';
 import { cn } from '@/lib/Utils';
@@ -16,6 +15,8 @@ export interface ChatMessage {
   content?: string; // For Conversation history format
   timestamp: string | Date;
   avatar?: string;
+  imageUrl?: string; // 🔹 NUEVO: URL de imagen adjunta (ChatInterface)
+  image_url?: string; // 🔹 Soporte para formato de BD
 }
 
 interface ChatBaseProps {
@@ -23,35 +24,72 @@ interface ChatBaseProps {
   messageRatings?: Record<number | string, 'up' | 'down' | null>;
   onRateMessage?: (id: number | string, rating: 'up' | 'down' | null) => void;
   readonly?: boolean;
-  userFullName?: string;
   showRatings?: boolean;
+  agentView?: boolean; // 🔹 NUEVO: indica si es vista de agente
 }
-
-const UserAvatar = ({ fullName }: { fullName?: string }) => {
-  const firstLetter = fullName?.charAt(0)?.toUpperCase() || 'U';
-  return (
-    <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-white font-bold">
-      {firstLetter}
-    </div>
-  );
-};
 
 export default function ChatBase({
   messages,
   messageRatings = {},
   onRateMessage,
   readonly = false,
-  userFullName,
   showRatings = true,
+  agentView = false, // 🔹 NUEVO: default false (vista estudiante)
 }: ChatBaseProps) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  // 🔹 DEBUG: Log todos los mensajes que llegan a ChatBase
+  useEffect(() => {
+    console.log('📨 ChatBase recibió mensajes:', messages.length);
+    messages.forEach((msg, idx) => {
+      console.log(`Mensaje ${idx}:`, {
+        id: msg.id,
+        sender: msg.sender,
+        role: msg.role,
+        hasImageUrl: !!msg.imageUrl,
+        hasImage_url: !!msg.image_url,
+        imageUrl: msg.imageUrl,
+        image_url: msg.image_url,
+      });
+    });
+  }, [messages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
-    scrollToBottom();
+    // Find the actual scroll container (may be parent or ancestor)
+    let chatContainer = messagesEndRef.current?.parentElement;
+
+    // Search up the DOM tree for element with overflow-y-auto or overflow-auto
+    while (chatContainer) {
+      const overflowY = window.getComputedStyle(chatContainer).overflowY;
+      if (overflowY === 'auto' || overflowY === 'scroll') {
+        break; // Found the scroll container
+      }
+      chatContainer = chatContainer.parentElement;
+    }
+
+    if (!chatContainer) {
+      // Si no hay contenedor con scroll, hacer scroll normal
+      scrollToBottom();
+      return;
+    }
+
+    // Verificar si el usuario está cerca del fondo (150px de margen)
+    const isNearBottom =
+      chatContainer.scrollHeight -
+        chatContainer.scrollTop -
+        chatContainer.clientHeight <
+      150;
+
+    // Solo hacer scroll si está cerca del fondo
+    if (isNearBottom) {
+      setTimeout(() => {
+        scrollToBottom();
+      }, 50);
+    }
   }, [messages]);
 
   // Normalize message format to handle both ChatInterface and Conversation formats
@@ -88,6 +126,19 @@ export default function ChatBase({
       uniqueId = `msg-${index}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     }
 
+    const finalImageUrl = msg.imageUrl || msg.image_url || null;
+
+    // 🔹 DEBUG: Log para ver qué imágenes se están procesando
+    if (finalImageUrl) {
+      console.log('📸 ChatBase: Imagen detectada', {
+        id: uniqueId,
+        imageUrl: msg.imageUrl,
+        image_url: msg.image_url,
+        finalImageUrl,
+        role: msg.role || msg.sender,
+      });
+    }
+
     return {
       id: uniqueId,
       originalId: msg.id, // Keep original for ratings
@@ -96,6 +147,7 @@ export default function ChatBase({
       content,
       timestamp: formattedTime,
       avatar: msg.avatar,
+      imageUrl: finalImageUrl, // 🔹 NUEVO: Soporte para ambos formatos
     };
   };
 
@@ -136,62 +188,157 @@ export default function ChatBase({
             })}
           >
             <div
-              className={cn('flex items-start gap-4', {
+              className={cn('flex items-start', {
                 'justify-end': normalized.isUser,
               })}
             >
-              {/* Bot Avatar (left side) */}
-              {normalized.isBot && normalized.avatar && (
-                <Image
-                  src={normalized.avatar}
-                  alt="Bot Avatar"
-                  width={50}
-                  height={40}
-                  className="rounded-full object-cover"
-                />
-              )}
-
-              {/* Message Bubble */}
+              {/* Message Bubble - No avatars */}
               <div
-                className={cn('relative max-w-lg p-4 rounded-2xl break-words', {
+                className={cn('relative max-w-md p-4 rounded-2xl break-words', {
+                  // Mensaje del estudiante en su vista O mensaje del agente en su vista (ambos azul derecha)
                   'bg-primary text-white rounded-tr-none shadow-md':
-                    normalized.isUser,
+                    (normalized.isUser && !agentView) ||
+                    (!normalized.isUser && agentView),
+                  // Mensaje del bot en vista estudiante (gris izquierda)
                   'bg-gray-100 text-dark rounded-tl-none border border-gray shadow-sm':
-                    !normalized.isUser,
+                    !normalized.isUser && !agentView,
+                  // Mensaje del usuario en vista agente (blanco izquierda)
+                  'bg-white text-dark rounded-tl-none border border-gray shadow-sm':
+                    normalized.isUser && agentView,
                 })}
               >
-                {/* Render bot messages with Markdown */}
-                {normalized.isBot ? (
-                  <div className="prose prose-sm max-w-none prose-headings:mt-2 prose-headings:mb-2 prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5">
+                {/* Renderizar imagen si existe (ARRIBA del texto) */}
+                {normalized.imageUrl ? (
+                  <div className="mb-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={normalized.imageUrl}
+                      alt="Imagen adjunta"
+                      className="max-w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                      style={{ maxHeight: '400px', objectFit: 'contain' }}
+                      onClick={() => {
+                        console.log('🖼️ Abriendo imagen:', normalized.imageUrl);
+                        window.open(normalized.imageUrl!, '_blank');
+                      }}
+                      onLoad={() =>
+                        console.log('✅ Imagen cargada:', normalized.imageUrl)
+                      }
+                      onError={(e) =>
+                        console.error(
+                          '❌ Error cargando imagen:',
+                          normalized.imageUrl,
+                          e
+                        )
+                      }
+                    />
+                  </div>
+                ) : null}
+
+                {/* Render content (texto en medio) - TODOS los mensajes usan Markdown */}
+                {normalized.content ? (
+                  <div
+                    className={cn(
+                      'prose prose-sm max-w-none prose-headings:mt-2 prose-headings:mb-2 prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5',
+                      {
+                        // 🔹 Fondos con texto oscuro (gris claro del bot en vista estudiante, o blanco del usuario en vista agente)
+                        'prose-headings:text-dark prose-p:text-dark prose-strong:text-dark prose-em:text-dark prose-li:text-dark':
+                          (!normalized.isUser && !agentView) ||
+                          (normalized.isUser && agentView),
+                        // 🔹 Fondos con texto blanco (azul del agente en vista agente, o azul del usuario en vista estudiante)
+                        'prose-headings:text-white prose-p:text-white prose-strong:text-white prose-em:text-white prose-li:text-white':
+                          (!normalized.isUser && agentView) ||
+                          (normalized.isUser && !agentView),
+                      }
+                    )}
+                  >
                     <ReactMarkdown
                       components={{
                         h1: ({ children }) => (
-                          <h1 className="text-xl font-bold text-dark mb-2 mt-2">
+                          <h1
+                            className={cn('text-xl font-bold mb-2 mt-2', {
+                              'text-dark':
+                                (!normalized.isUser && !agentView) ||
+                                (normalized.isUser && agentView),
+                              'text-white':
+                                (!normalized.isUser && agentView) ||
+                                (normalized.isUser && !agentView),
+                            })}
+                          >
                             {children}
                           </h1>
                         ),
                         h2: ({ children }) => (
-                          <h2 className="text-lg font-bold text-dark mb-2 mt-2">
+                          <h2
+                            className={cn('text-lg font-bold mb-2 mt-2', {
+                              'text-dark':
+                                (!normalized.isUser && !agentView) ||
+                                (normalized.isUser && agentView),
+                              'text-white':
+                                (!normalized.isUser && agentView) ||
+                                (normalized.isUser && !agentView),
+                            })}
+                          >
                             {children}
                           </h2>
                         ),
                         h3: ({ children }) => (
-                          <h3 className="text-base font-bold text-dark mb-2 mt-2">
+                          <h3
+                            className={cn('text-base font-bold mb-2 mt-2', {
+                              'text-dark':
+                                (!normalized.isUser && !agentView) ||
+                                (normalized.isUser && agentView),
+                              'text-white':
+                                (!normalized.isUser && agentView) ||
+                                (normalized.isUser && !agentView),
+                            })}
+                          >
                             {children}
                           </h3>
                         ),
                         p: ({ children }) => (
-                          <p className="text-dark mb-2 leading-relaxed whitespace-pre-wrap">
+                          <p
+                            className={cn(
+                              'mb-2 leading-relaxed whitespace-pre-wrap',
+                              {
+                                'text-dark':
+                                  (!normalized.isUser && !agentView) ||
+                                  (normalized.isUser && agentView),
+                                'text-white':
+                                  (!normalized.isUser && agentView) ||
+                                  (normalized.isUser && !agentView),
+                              }
+                            )}
+                          >
                             {children}
                           </p>
                         ),
                         strong: ({ children }) => (
-                          <strong className="font-bold text-dark">
+                          <strong
+                            className={cn('font-bold', {
+                              'text-dark':
+                                (!normalized.isUser && !agentView) ||
+                                (normalized.isUser && agentView),
+                              'text-white':
+                                (!normalized.isUser && agentView) ||
+                                (normalized.isUser && !agentView),
+                            })}
+                          >
                             {children}
                           </strong>
                         ),
                         em: ({ children }) => (
-                          <em className="italic text-dark">{children}</em>
+                          <em
+                            className={cn('italic', {
+                              'text-dark':
+                                (!normalized.isUser && !agentView) ||
+                                (normalized.isUser && agentView),
+                              'text-white':
+                                (!normalized.isUser && agentView) ||
+                                (normalized.isUser && !agentView),
+                            })}
+                          >
+                            {children}
+                          </em>
                         ),
                         ul: ({ children }) => (
                           <ul className="list-disc list-inside space-y-1 my-2">
@@ -204,20 +351,70 @@ export default function ChatBase({
                           </ol>
                         ),
                         li: ({ children }) => (
-                          <li className="text-dark">{children}</li>
+                          <li
+                            className={cn({
+                              'text-dark':
+                                (!normalized.isUser && !agentView) ||
+                                (normalized.isUser && agentView),
+                              'text-white':
+                                (!normalized.isUser && agentView) ||
+                                (normalized.isUser && !agentView),
+                            })}
+                          >
+                            {children}
+                          </li>
                         ),
                         blockquote: ({ children }) => (
-                          <blockquote className="border-l-4 border-primary pl-4 py-2 my-2 bg-blue-50 rounded">
+                          <blockquote
+                            className={cn('border-l-4 pl-4 py-2 my-2 rounded', {
+                              // Fondos claros con texto oscuro (bot en vista estudiante o usuario en vista agente)
+                              'border-primary bg-blue-50 text-dark':
+                                (!normalized.isUser && !agentView) ||
+                                (normalized.isUser && agentView),
+                              // Fondos oscuros con texto blanco (agente en vista agente o usuario en vista estudiante)
+                              'border-white/50 bg-blue-700 text-white':
+                                (!normalized.isUser && agentView) ||
+                                (normalized.isUser && !agentView),
+                            })}
+                          >
                             {children}
                           </blockquote>
                         ),
                         code: ({ children }) => (
-                          <code className="bg-gray-200 px-2 py-1 rounded text-sm font-mono text-primary">
+                          <code
+                            className={cn(
+                              'px-2 py-1 rounded text-sm font-mono',
+                              {
+                                // Fondos claros → código con fondo gris
+                                'bg-gray-200 text-primary':
+                                  (!normalized.isUser && !agentView) ||
+                                  (normalized.isUser && agentView),
+                                // Fondos oscuros → código con fondo azul oscuro
+                                'bg-blue-700 text-white':
+                                  (!normalized.isUser && agentView) ||
+                                  (normalized.isUser && !agentView),
+                              }
+                            )}
+                          >
                             {children}
                           </code>
                         ),
                         pre: ({ children }) => (
-                          <pre className="bg-gray-800 text-gray-100 p-3 rounded-lg overflow-x-auto my-2">
+                          <pre
+                            className={cn(
+                              'p-3 rounded-lg overflow-x-auto my-2',
+                              {
+                                // Fondos claros → pre con fondo gris oscuro
+                                'bg-gray-800 text-gray-100':
+                                  (!normalized.isUser && !agentView) ||
+                                  (normalized.isUser && agentView),
+                                // Fondos oscuros → pre con fondo azul muy oscuro
+                                'bg-blue-900 text-white':
+                                  (!normalized.isUser && agentView) ||
+                                  (normalized.isUser && !agentView),
+                              }
+                            )}
+                          >
                             {children}
                           </pre>
                         ),
@@ -226,28 +423,27 @@ export default function ChatBase({
                       {normalized.content}
                     </ReactMarkdown>
                   </div>
-                ) : (
-                  <p className="whitespace-pre-wrap">{normalized.content}</p>
-                )}
+                ) : null}
 
-                {/* Timestamp */}
+                {/* Timestamp (DEBAJO del texto) */}
                 <span
                   className={cn('text-xs mt-2 block', {
-                    'text-blue-200': normalized.isUser,
-                    'text-gray-500': !normalized.isUser,
+                    'text-blue-200':
+                      (normalized.isUser && !agentView) ||
+                      (!normalized.isUser && agentView), // Mensajes azules
+                    'text-gray-500':
+                      (normalized.isUser && agentView) ||
+                      (!normalized.isUser && !agentView), // Mensajes grises/blancos
                   })}
                 >
                   {normalized.timestamp}
                 </span>
               </div>
-
-              {/* User Avatar (right side) */}
-              {normalized.isUser && <UserAvatar fullName={userFullName} />}
             </div>
 
             {/* Rating buttons - Only for bot messages and when not readonly */}
             {normalized.isBot && !readonly && showRatings && onRateMessage && (
-              <div className="flex items-center gap-2 mt-2 mb-2 ml-16">
+              <div className="flex items-center gap-2 mt-2 mb-2">
                 <button
                   onClick={() =>
                     handleRating(normalized.originalId, rating, 'up')

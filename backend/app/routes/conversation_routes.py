@@ -235,6 +235,69 @@ def rate_message(
     }
 
 
+@router.get("/conversations/{conversation_id}/escalation-status")
+def get_escalation_status(
+    conversation_id: str, user: Any = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Get the escalation status of a conversation.
+    Returns: is_escalated, agent_request status, agent info if assigned.
+    """
+    user_id = user.id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+
+    # Verify conversation belongs to user (or user is agent)
+    conversation = conversation_service.get_conversation(conversation_id, user_id)
+    if not conversation:
+        raise HTTPException(
+            status_code=404, detail="Conversation not found or access denied"
+        )
+
+    # Get agent_request if exists
+    from app.core.config import supabase_
+
+    agent_request_response = (
+        supabase_.table("agent_requests")
+        .select("id, status, assigned_at, resolved_at, agent_id")
+        .eq("conversation_id", conversation_id)
+        .execute()
+    )
+
+    escalation_data = {
+        "is_escalated": conversation.get("is_escalated", False),
+        "escalated_at": conversation.get("escalated_at"),
+        "resolved": conversation.get("resolved", False),
+        "resolved_at": conversation.get("resolved_at"),
+        "agent_request": None,
+    }
+
+    if agent_request_response.data and len(agent_request_response.data) > 0:
+        agent_req = agent_request_response.data[0]
+
+        # Get agent name if agent_id exists
+        agent_name = None
+        if agent_req.get("agent_id"):
+            agent_profile = (
+                supabase_.table("profiles")
+                .select("full_name")
+                .eq("id", agent_req["agent_id"])
+                .execute()
+            )
+            if agent_profile.data and len(agent_profile.data) > 0:
+                agent_name = agent_profile.data[0].get("full_name")
+
+        escalation_data["agent_request"] = {
+            "id": agent_req["id"],
+            "status": agent_req["status"],
+            "assigned_at": agent_req.get("assigned_at"),
+            "resolved_at": agent_req.get("resolved_at"),
+            "agent_name": agent_name,
+        }
+
+    return escalation_data
+
+
 @router.delete("/conversations/{conversation_id}")
 def delete_conversation(
     conversation_id: str, user: Any = Depends(get_current_user)

@@ -12,6 +12,21 @@ class Config:
     SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
+    # Cloudinary Configuration
+    CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "")
+    CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "")
+    CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "")
+
+    # Image upload limits
+    MAX_IMAGE_SIZE_MB = 10  # 10MB max
+    ALLOWED_IMAGE_TYPES = [
+        "image/jpeg",
+        "image/png",
+        "image/jpg",
+        "image/webp",
+        "image/gif",
+    ]
+
 
 class DevelopmentConfig(Config):
     DEBUG = True

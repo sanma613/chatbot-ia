@@ -1,17 +1,18 @@
+// Layout para agentes de soporte
 'use client';
 
-import Sidebar from '@/components/Sidebar';
+import AgentSidebar from '@/components/agent/AgentSidebar';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useRoleRedirect } from '@/hooks/useRoleRedirect';
 import React from 'react';
 
-export default function StudentLayout({
+export default function AgentLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   // Verificar que el usuario tiene el rol correcto
-  const { loading } = useRoleRedirect('user');
+  const { loading } = useRoleRedirect('agent');
 
   // Mostrar loading mientras verifica
   if (loading) {
@@ -26,7 +27,7 @@ export default function StudentLayout({
   return (
     <ProtectedRoute>
       <div className="flex h-screen bg-gray-100 font-sans">
-        <Sidebar />
+        <AgentSidebar />
         <main className="flex-1 bg-white overflow-hidden">{children}</main>
       </div>
     </ProtectedRoute>

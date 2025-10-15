@@ -20,26 +20,38 @@ function convertApiMessageToChat(apiMsg: ApiMessage): ChatMessage {
     content: apiMsg.content,
     timestamp: new Date(apiMsg.timestamp),
     rating: apiMsg.rating,
+    image_url: apiMsg.image_url, // 🔹 Incluir URL de imagen
   };
 }
 
-export function useConversation(conversationId: string): UseConversationReturn {
+export function useConversation(
+  conversationId: string,
+  options?: { enablePolling?: boolean; pollingInterval?: number }
+): UseConversationReturn {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const enablePolling = options?.enablePolling ?? false;
+  const pollingInterval = options?.pollingInterval ?? 3000; // 3 segundos por defecto
+
   useEffect(() => {
-    const loadConversation = async () => {
+    let mounted = true;
+    let intervalId: NodeJS.Timeout | null = null;
+
+    const loadConversation = async (isInitial = false) => {
       if (!conversationId) {
-        setError('ID de conversación no válido');
-        setLoading(false);
+        if (mounted) {
+          setError('ID de conversación no válido');
+          setLoading(false);
+        }
         return;
       }
 
       try {
         const data = await getConversationByIdAPI(conversationId);
 
-        if (data && data.conversation) {
+        if (data && data.conversation && mounted) {
           // Convert API format to frontend format
           const messages = data.messages.map(convertApiMessageToChat);
 
@@ -57,19 +69,40 @@ export function useConversation(conversationId: string): UseConversationReturn {
           };
 
           setConversation(conv);
-        } else {
+        } else if (mounted) {
           setError('Conversación no encontrada');
         }
       } catch (err) {
-        console.error('Error al cargar conversación:', err);
-        setError('Error al cargar la conversación');
+        if (mounted) {
+          console.error('Error al cargar conversación:', err);
+          if (isInitial) {
+            setError('Error al cargar la conversación');
+          }
+        }
       } finally {
-        setLoading(false);
+        if (mounted && isInitial) {
+          setLoading(false);
+        }
       }
     };
 
-    loadConversation();
-  }, [conversationId]);
+    // Carga inicial
+    loadConversation(true);
+
+    // Configurar polling si está habilitado
+    if (enablePolling) {
+      intervalId = setInterval(() => {
+        loadConversation(false); // No es carga inicial
+      }, pollingInterval);
+    }
+
+    return () => {
+      mounted = false;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [conversationId, enablePolling, pollingInterval]);
 
   return { conversation, loading, error };
 }
