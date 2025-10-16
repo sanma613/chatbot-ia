@@ -99,12 +99,10 @@ def logout(response: Response, user: Any = Depends(get_current_user)) -> Dict[st
     """Cerrar sesión eliminando cookie"""
     response.delete_cookie(
         key="access_token",
-        value=token,
         httponly=True,
-        max_age=60 * 60 * 24 * 7,
-        secure=True,
-        samesite="none",
-        path='/',
+        secure=True,       # igual que en el login
+        samesite="none",   # igual que en el login
+        path="/",          # importante: debe coincidir
     )
     return {"message": "Sesión cerrada"}
 
