@@ -11,6 +11,7 @@ import {
   Bell,
   LogOut,
   LucideIcon,
+  BookOpen,
 } from 'lucide-react';
 
 import { useUser } from '@/hooks/useUser';
@@ -27,6 +28,7 @@ export type NavItem = {
 // --- Items de navegación por defecto (student) ---
 const defaultNavItems: NavItem[] = [
   { name: 'Chatbot', href: '/chat', icon: MessageSquare },
+  { name: 'Soluciones Rápidas', href: '/soluciones-rapidas', icon: BookOpen },
   { name: 'Calendario', href: '/calendar', icon: Calendar },
   { name: 'Historial', href: '/history', icon: History },
   { name: 'Notificaciones', href: '/notifications', icon: Bell },

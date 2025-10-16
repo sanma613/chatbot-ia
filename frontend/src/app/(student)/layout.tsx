@@ -27,7 +27,7 @@ export default function StudentLayout({
     <ProtectedRoute>
       <div className="flex h-screen bg-gray-100 font-sans">
         <Sidebar />
-        <main className="flex-1 bg-white overflow-hidden">{children}</main>
+        <main className="flex-1 bg-white overflow-y-auto">{children}</main>
       </div>
     </ProtectedRoute>
   );
