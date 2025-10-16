@@ -95,7 +95,6 @@ def login(request: LoginRequest, response: Response) -> Dict[str, str]:
 
 
 @router.post("/logout")
-@router.post("/logout")
 def logout(response: Response, user: Any = Depends(get_current_user)) -> Dict[str, str]:
     """Cerrar sesión eliminando cookie"""
     response.delete_cookie(
