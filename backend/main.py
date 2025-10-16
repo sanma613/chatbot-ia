@@ -45,6 +45,7 @@ origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://192.168.1.8:3000",
+    "https://flourishing-centaur-cfd4bf.netlify.app",
 ]
 
 app.add_middleware(
