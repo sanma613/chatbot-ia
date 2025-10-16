@@ -42,11 +42,21 @@ export function useWebSocketChat({
       return;
     }
 
-    // Create WebSocket connection
-    const wsUrl = `ws://localhost:8000/ws/chat/${conversationId}`;
+    // Get backend URL from environment variable
+    const backendUrl =
+      process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+
+    // Convert HTTP/HTTPS URL to WS/WSS URL
+    const wsProtocol = backendUrl.startsWith('https://') ? 'wss://' : 'ws://';
+    const wsBaseUrl = backendUrl.replace(/^https?:\/\//, '');
+    const wsUrl = `${wsProtocol}${wsBaseUrl}/ws/chat/${conversationId}`;
+
+    console.log('🔌 Connecting to WebSocket:', wsUrl);
+
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
+      console.log('✅ WebSocket connected');
       setIsConnected(true);
       setError(null);
     };

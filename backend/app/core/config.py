@@ -12,6 +12,10 @@ class Config:
     SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
+    # Environment configuration
+    ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+    FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
     # Cloudinary Configuration
     CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "")
     CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "")
@@ -39,6 +43,9 @@ class ProductionConfig(Config):
     ENV = "production"
     DATABASE_URI = os.getenv("DATABASE_URI")  # URI de la base de datos para producción
 
+
+# Determine if running in production
+IS_PRODUCTION = Config.ENVIRONMENT == "production"
 
 SUPABASE_URL = Config.SUPABASE_URL
 SUPABASE_KEY = Config.SUPABASE_SERVICE_ROLE_KEY

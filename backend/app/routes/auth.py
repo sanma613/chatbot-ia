@@ -10,6 +10,7 @@ from app.services.auth_services import (
     login_user,
     register_user,
 )
+from app.core.config import IS_PRODUCTION, Config
 
 router = APIRouter()
 security = HTTPBearer()
@@ -82,13 +83,29 @@ def login(request: LoginRequest, response: Response) -> Dict[str, str]:
     """Login de usuario y creación de cookie de sesión"""
     token = login_user(email=request.email, password=request.password)
 
+    # Determine cookie settings based on environment
+    is_secure = IS_PRODUCTION  # Secure cookies only in production (HTTPS)
+    same_site = (
+        "none" if IS_PRODUCTION else "lax"
+    )  # "none" required for cross-origin in production
+
+    # Extract domain from FRONTEND_URL if in production
+    domain = None
+    if IS_PRODUCTION and Config.FRONTEND_URL:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(Config.FRONTEND_URL)
+        # Use the domain without subdomain for broader cookie scope
+        domain = parsed.netloc
+
     response.set_cookie(
         key="access_token",
         value=token,
         httponly=True,
-        max_age=60 * 60 * 24 * 7,
-        secure=True,
-        samesite="none",
+        max_age=60 * 60 * 24 * 7,  # 7 days
+        secure=is_secure,  # True in production (HTTPS required)
+        samesite=same_site,  # "none" in production for cross-origin, "lax" in dev
+        domain=domain,  # Set domain in production for proper cookie scope
     )
 
     return {"message": "Login exitoso"}
@@ -97,5 +114,19 @@ def login(request: LoginRequest, response: Response) -> Dict[str, str]:
 @router.post("/logout")
 def logout(response: Response, user: Any = Depends(get_current_user)) -> Dict[str, str]:
     """Cerrar sesión eliminando cookie"""
-    response.delete_cookie(key="access_token")
+    # Determine domain for cookie deletion (must match login domain)
+    domain = None
+    if IS_PRODUCTION and Config.FRONTEND_URL:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(Config.FRONTEND_URL)
+        domain = parsed.netloc
+
+    response.delete_cookie(
+        key="access_token",
+        domain=domain,
+        secure=IS_PRODUCTION,
+        samesite="none" if IS_PRODUCTION else "lax",
+    )
+    return {"message": "Logout exitoso"}
     return {"message": "Sesión cerrada"}
