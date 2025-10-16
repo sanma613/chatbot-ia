@@ -129,4 +129,3 @@ def logout(response: Response, user: Any = Depends(get_current_user)) -> Dict[st
         samesite="none" if IS_PRODUCTION else "lax",
     )
     return {"message": "Logout exitoso"}
-    return {"message": "Sesión cerrada"}
