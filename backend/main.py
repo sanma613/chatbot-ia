@@ -14,6 +14,7 @@ from app.routes import (
     agent_routes,
     websocket_routes,
     message_routes,
+    quick_solutions_routes,
 )
 from app.services.scheduler_service import start_scheduler, stop_scheduler
 
@@ -64,6 +65,7 @@ app.include_router(email_routes.router, prefix="/email")
 app.include_router(agent_routes.router, prefix="/agent")
 app.include_router(message_routes.router)  # Message routes with images
 app.include_router(websocket_routes.router)  # WebSocket routes
+app.include_router(quick_solutions_routes.router)  # Quick solutions/knowledge base
 
 
 if __name__ == "__main__":
