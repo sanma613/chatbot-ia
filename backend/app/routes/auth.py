@@ -87,8 +87,8 @@ def login(request: LoginRequest, response: Response) -> Dict[str, str]:
         value=token,
         httponly=True,
         max_age=60 * 60 * 24 * 7,
-        secure=False,
-        samesite="lax",
+        secure=True,
+        samesite="none",
     )
 
     return {"message": "Login exitoso"}
